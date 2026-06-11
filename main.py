@@ -261,3 +261,83 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
     </html>
     """
     return html
+@app.get("/resumen", response_class=HTMLResponse)
+def resumen(lang: str = Query("es")):
+    datos = []
+    for cripto, par in PARES.items():
+        try:
+            precio = obtener_precio(par["simbolo"])
+            hist = historiales[cripto]
+            if len(hist) > 1:
+                diff = precio - hist[-1]["precio"]
+                subiendo = diff > 0
+            else:
+                subiendo = None
+            lista = [p["precio"] for p in hist]
+            rsi = calcular_rsi(lista)
+            if rsi is not None:
+                if rsi < 30: decision = "COMPRAR"; color = "#00ff88"
+                elif rsi > 70: decision = "VENDER"; color = "#ff4444"
+                else: decision = "ESPERAR"; color = "orange"
+            else:
+                if precio < par["comprar"]: decision = "COMPRAR"; color = "#00ff88"
+                elif precio > par["vender"]: decision = "VENDER"; color = "#ff4444"
+                else: decision = "ESPERAR"; color = "orange"
+            if lang == "pt" and decision == "ESPERAR":
+                decision = "AGUARDAR"
+            tend = "↗" if subiendo else "↘" if subiendo is not None else "→"
+            tend_color = "#00ff88" if subiendo else "#ff4444" if subiendo is not None else "orange"
+            datos.append({"cripto": cripto, "nombre": par["nombre"], "precio": precio, "tend": tend, "tend_color": tend_color, "decision": decision, "color": color})
+        except:
+            pass
+
+    filas = ""
+    for d in datos:
+        filas += f"""
+        <a href="/?lang={lang}&cripto={d['cripto']}" style="text-decoration:none;">
+            <div style="background:#16213e;border-radius:12px;padding:15px 20px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;border:1px solid #ffffff11;">
+                <div style="font-size:20px;font-weight:bold;color:#f0a500;width:50px;">{d['cripto']}</div>
+                <div style="font-size:18px;font-weight:bold;color:white;">${d['precio']:,.2f}</div>
+                <div style="font-size:18px;color:{d['tend_color']};font-weight:bold;">{d['tend']}</div>
+                <div style="font-size:16px;font-weight:bold;color:{d['color']};border:1px solid {d['color']};padding:4px 12px;border-radius:20px;">{d['decision']}</div>
+            </div>
+        </a>
+        """
+
+    titulo = "Resumen del Mercado" if lang == "es" else "Resumo do Mercado"
+    btn_lang = "🇧🇷 Português" if lang == "es" else "🇪🇸 Español"
+    btn_url = f"/resumen?lang={'pt' if lang == 'es' else 'es'}"
+    home_txt = "← Volver" if lang == "es" else "← Voltar"
+
+    return f"""
+    <html>
+    <head>
+        <title>BitMind — {titulo}</title>
+        <meta http-equiv="refresh" content="30;url=/resumen?lang={lang}">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+            body {{ font-family: Arial, sans-serif; background: #0d0d1a; color: white; min-height: 100vh; }}
+            .header {{ background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 20px; text-align: center; border-bottom: 2px solid #f0a500; position: relative; }}
+            .logo {{ font-size: 28px; font-weight: bold; color: #f0a500; letter-spacing: 2px; }}
+            .logo span {{ color: white; }}
+            .lang-btn {{ position: absolute; top: 20px; right: 15px; background: #16213e; border: 1px solid #f0a500; color: #f0a500; padding: 6px 12px; border-radius: 20px; text-decoration: none; font-size: 13px; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px 15px; }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <a href="{btn_url}" class="lang-btn">{btn_lang}</a>
+            <div class="logo">Bit<span>Mind</span></div>
+            <div style="font-size:14px;color:#aaa;margin-top:4px;">{titulo}</div>
+        </div>
+        <div class="container">
+            <a href="/?lang={lang}" style="color:#f0a500;font-size:14px;display:block;margin-bottom:15px;">{home_txt}</a>
+            {filas}
+            <div style="text-align:center;color:#555;font-size:12px;padding:10px;">
+                Se actualiza cada 30 seg
+            </div>
+        </div>
+    </body>
+    </html>
+    """
