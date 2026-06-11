@@ -87,3 +87,173 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
         if rsi < 30:
             decision_key = "comprar"; color = "#00ff88"
         elif rsi > 70:
+            decision_key = "vender"; color = "#ff4444"
+        else:
+            decision_key = "esperar"; color = "orange"
+    else:
+        if precio < par["comprar"]:
+            decision_key = "comprar"; color = "#00ff88"
+        elif precio > par["vender"]:
+            decision_key = "vender"; color = "#ff4444"
+        else:
+            decision_key = "esperar"; color = "orange"
+
+    if lang == "es":
+        tendencia_txt = "SUBIENDO ↗" if subiendo else "BAJANDO ↘" if subiendo is not None else "ESTABLE →"
+        decisiones = {"comprar": "COMPRAR", "vender": "VENDER", "esperar": "ESPERAR"}
+        btn_lang = "🇧🇷 Português"; btn_url = f"/?lang=pt&cripto={cripto}"
+        label_analisis = "🤖 Análisis IA"
+        label_actualizado = "Actualizado"
+        label_cada = "Se actualiza cada 30 seg"
+        label_precio = "Precio actual"
+        label_rsi = "RSI"
+        label_mm = "Media Móvil 7"
+        label_indicadores = "Indicadores Técnicos"
+        rsi_zona = "Sobrevendido 🟢" if rsi and rsi < 30 else "Sobrecomprado 🔴" if rsi and rsi > 70 else "Neutral 🟡"
+    else:
+        tendencia_txt = "SUBINDO ↗" if subiendo else "CAINDO ↘" if subiendo is not None else "ESTÁVEL →"
+        decisiones = {"comprar": "COMPRAR", "vender": "VENDER", "esperar": "AGUARDAR"}
+        btn_lang = "🇪🇸 Español"; btn_url = f"/?lang=es&cripto={cripto}"
+        label_analisis = "🤖 Análise IA"
+        label_actualizado = "Atualizado"
+        label_cada = "Atualiza a cada 30 seg"
+        label_precio = "Preço atual"
+        label_rsi = "RSI"
+        label_mm = "Média Móvel 7"
+        label_indicadores = "Indicadores Técnicos"
+        rsi_zona = "Sobrevendido 🟢" if rsi and rsi < 30 else "Sobrecomprado 🔴" if rsi and rsi > 70 else "Neutro 🟡"
+
+    decision = decisiones[decision_key]
+    color_tendencia = "#00ff88" if subiendo else "#ff4444" if subiendo is not None else "orange"
+    analisis = analisis_ia(par["nombre"], precio, tendencia_txt, rsi, lang)
+    labels = [p["hora"] for p in historiales[cripto]]
+    valores = lista
+    rsi_display = str(rsi) if rsi else "..."
+    mm7_display = f"${mm7:,.2f}" if mm7 else "..."
+
+    tabs = ""
+    for c in PARES:
+        active = "background:#f0a500;color:#0d0d1a;" if c == cripto else "background:#16213e;color:#f0a500;"
+        tabs += f'<a href="/?lang={lang}&cripto={c}" style="{active} padding:8px 16px; border-radius:20px; text-decoration:none; font-weight:bold; font-size:14px; border:1px solid #f0a500;">{c}</a> '
+
+    html = f"""
+    <html>
+    <head>
+        <title>BitMind</title>
+        <meta http-equiv="refresh" content="30;url=/?lang={lang}&cripto={cripto}">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <style>
+            * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+            body {{ font-family: Arial, sans-serif; background: #0d0d1a; color: white; min-height: 100vh; }}
+            .header {{ background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 20px; text-align: center; border-bottom: 2px solid #f0a500; position: relative; }}
+            .logo {{ font-size: 28px; font-weight: bold; color: #f0a500; letter-spacing: 2px; }}
+            .logo span {{ color: white; }}
+            .tagline {{ font-size: 12px; color: #aaa; margin-top: 4px; }}
+            .lang-btn {{ position: absolute; top: 20px; right: 15px; background: #16213e; border: 1px solid #f0a500; color: #f0a500; padding: 6px 12px; border-radius: 20px; text-decoration: none; font-size: 13px; }}
+            .tabs {{ display: flex; justify-content: center; gap: 8px; padding: 15px; flex-wrap: wrap; background: #0d0d1a; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px 15px; }}
+            .precio-card {{ background: #16213e; border-radius: 16px; padding: 25px; text-align: center; margin-bottom: 15px; border: 1px solid #ffffff11; }}
+            .label-precio {{ font-size: 12px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }}
+            .precio {{ font-size: 48px; font-weight: bold; margin: 8px 0; }}
+            .tendencia {{ font-size: 18px; color: {color_tendencia}; font-weight: bold; }}
+            .decision {{ font-size: 32px; font-weight: bold; color: {color}; margin-top: 8px; padding: 8px 20px; border: 2px solid {color}; border-radius: 30px; display: inline-block; }}
+            .indicadores {{ display: flex; gap: 10px; margin-bottom: 15px; }}
+            .ind-card {{ flex: 1; background: #16213e; border-radius: 12px; padding: 15px; text-align: center; border: 1px solid #ffffff11; }}
+            .ind-titulo {{ font-size: 11px; color: #aaa; text-transform: uppercase; margin-bottom: 6px; }}
+            .ind-valor {{ font-size: 22px; font-weight: bold; color: #f0a500; }}
+            .ind-zona {{ font-size: 12px; color: #aaa; margin-top: 4px; }}
+            .grafico-card {{ background: #16213e; border-radius: 16px; padding: 20px; margin-bottom: 15px; border: 1px solid #ffffff11; }}
+            .analisis-card {{ background: #16213e; border-left: 4px solid #f0a500; border-radius: 0 16px 16px 0; padding: 15px 20px; margin-bottom: 15px; }}
+            .analisis-titulo {{ color: #f0a500; font-weight: bold; font-size: 14px; margin-bottom: 8px; }}
+            .analisis-texto {{ font-size: 15px; line-height: 1.6; color: #ddd; }}
+            .footer {{ text-align: center; color: #555; font-size: 12px; padding: 10px; }}
+            .ind-label {{ font-size: 11px; color: #aaa; text-transform: uppercase; margin-bottom: 8px; text-align: center; }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <a href="{btn_url}" class="lang-btn">{btn_lang}</a>
+            <div class="logo">Bit<span>Mind</span></div>
+            <div class="tagline">AI-Powered Crypto Trading Signal</div>
+        </div>
+
+        <div class="tabs">{tabs}</div>
+
+        <div class="container">
+            <div class="precio-card">
+                <div class="label-precio">{label_precio} — {par["nombre"]}</div>
+                <div class="precio">${precio:,.2f}</div>
+                <div class="tendencia">{tendencia_txt}</div>
+                <div style="margin-top:12px">
+                    <span class="decision">{decision}</span>
+                </div>
+            </div>
+
+            <div class="ind-label">{label_indicadores}</div>
+            <div class="indicadores">
+                <div class="ind-card">
+                    <div class="ind-titulo">{label_rsi}</div>
+                    <div class="ind-valor">{rsi_display}</div>
+                    <div class="ind-zona">{rsi_zona}</div>
+                </div>
+                <div class="ind-card">
+                    <div class="ind-titulo">{label_mm}</div>
+                    <div class="ind-valor" style="font-size:16px">{mm7_display}</div>
+                    <div class="ind-zona">{'↗' if mm7 and precio > mm7 else '↘' if mm7 else '...'}</div>
+                </div>
+            </div>
+
+            <div class="grafico-card">
+                <canvas id="graficoCripto"></canvas>
+            </div>
+
+            <div class="analisis-card">
+                <div class="analisis-titulo">{label_analisis}:</div>
+                <div class="analisis-texto">{analisis}</div>
+            </div>
+
+            <div style="text-align:center; margin-bottom:15px;">
+                <a href="https://wa.me/?text=🤖 BitMind - Crypto Trading con IA%0A💰 {par['nombre']}: ${precio:,.2f}%0A📊 Señal: {decision}%0A👉 https://bot-traiding-btc.onrender.com"
+                   target="_blank"
+                   style="background: #25D366; color: white; padding: 12px 25px; border-radius: 30px; text-decoration: none; font-size: 16px; font-weight: bold;">
+                    📲 Compartir en WhatsApp
+                </a>
+            </div>
+
+            <div class="footer">
+                {label_actualizado}: {hora} | {label_cada}
+            </div>
+        </div>
+
+        <script>
+            const ctx = document.getElementById('graficoCripto').getContext('2d');
+            new Chart(ctx, {{
+                type: 'line',
+                data: {{
+                    labels: {labels},
+                    datasets: [{{
+                        label: '{cripto}/USD',
+                        data: {valores},
+                        borderColor: '#f0a500',
+                        backgroundColor: 'rgba(240,165,0,0.1)',
+                        borderWidth: 2,
+                        pointRadius: 3,
+                        fill: true,
+                        tension: 0.4
+                    }}]
+                }},
+                options: {{
+                    responsive: true,
+                    plugins: {{ legend: {{ labels: {{ color: 'white', font: {{ size: 12 }} }} }} }},
+                    scales: {{
+                        x: {{ ticks: {{ color: '#aaa', maxTicksLimit: 5 }} }},
+                        y: {{ ticks: {{ color: '#aaa' }} }}
+                    }}
+                }}
+            }});
+        </script>
+    </body>
+    </html>
+    """
+    return html
