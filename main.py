@@ -17,11 +17,12 @@ def obtener_precio():
 def analisis_ia(precio, tendencia):
     mensaje = client.messages.create(
         model="claude-haiku-4-5",
-        max_tokens=150,
+        max_tokens=100,
+        system="Eres un analista de criptomonedas. Responde SIEMPRE en exactamente 2 frases cortas en español. NUNCA uses markdown, asteriscos, almohadillas ni títulos. Solo texto plano.",
         messages=[{
-    "role": "user",
-    "content": f"El precio del Bitcoin es ${precio:,.2f} USD con tendencia {tendencia}. Dame exactamente 2 frases de análisis en español. Sin títulos, sin markdown, sin asteriscos. Solo texto limpio."
-}]
+            "role": "user",
+            "content": f"Bitcoin está en ${precio:,.2f} USD con tendencia {tendencia}."
+        }]
     )
     return mensaje.content[0].text
 
