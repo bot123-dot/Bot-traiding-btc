@@ -131,7 +131,7 @@ def inicio(lang: str = Query("es")):
     html = f"""
     <html>
     <head>
-        <title>CryptoMind</title>
+        <title>BitMind</title>
         <meta http-equiv="refresh" content="30;url=/?lang={lang}">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
