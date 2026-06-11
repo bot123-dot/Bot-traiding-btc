@@ -165,7 +165,7 @@ def inicio(lang: str = Query("es")):
     <body>
         <div class="header">
             <a href="{btn_url}" class="lang-btn">{btn_lang}</a>
-            <div class="logo">Crypto<span>Mind</span></div>
+            <div class="logo">Bit<span>Mind</span></div>
             <div class="tagline">AI-Powered Bitcoin Trading Signal</div>
         </div>
 
