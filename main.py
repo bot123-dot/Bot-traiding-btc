@@ -44,12 +44,12 @@ def calcular_mm(precios, periodo=7):
     return round(sum(precios[-periodo:]) / periodo, 2)
 
 def analisis_ia(cripto, precio, tendencia, rsi, idioma):
-    lang = "español" if idioma == "es" else "português brasileiro"
+    lang = "español latinoamericano" if idioma == "es" else "português brasileiro"
     rsi_txt = f"RSI={rsi}" if rsi else "RSI insuficiente"
     mensaje = client.messages.create(
         model="claude-haiku-4-5",
         max_tokens=120,
-        system=f"Eres un analista de criptomonedas. Responde SIEMPRE en exactamente 2 frases cortas en {lang}. NUNCA uses markdown, asteriscos, almohadillas ni títulos. Solo texto plano.",
+        system=f"Eres un analista de criptomonedas. Responde SIEMPRE en exactamente 2 frases cortas en {lang}. NUNCA uses markdown, asteriscos, almohadillas ni títulos. Solo texto plano y directo.",
         messages=[{
             "role": "user",
             "content": f"{cripto} está en ${precio:,.2f} USD, tendencia {tendencia}, {rsi_txt}."
@@ -109,6 +109,7 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
         label_rsi = "RSI"
         label_mm = "Media Móvil 7"
         label_indicadores = "Indicadores Técnicos"
+        label_resumen = "📊 Resumen"
         rsi_zona = "Sobrevendido 🟢" if rsi and rsi < 30 else "Sobrecomprado 🔴" if rsi and rsi > 70 else "Neutral 🟡"
     else:
         tendencia_txt = "SUBINDO ↗" if subiendo else "CAINDO ↘" if subiendo is not None else "ESTÁVEL →"
@@ -121,6 +122,7 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
         label_rsi = "RSI"
         label_mm = "Média Móvel 7"
         label_indicadores = "Indicadores Técnicos"
+        label_resumen = "📊 Resumo"
         rsi_zona = "Sobrevendido 🟢" if rsi and rsi < 30 else "Sobrecomprado 🔴" if rsi and rsi > 70 else "Neutro 🟡"
 
     decision = decisiones[decision_key]
@@ -130,11 +132,6 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
     valores = lista
     rsi_display = str(rsi) if rsi else "..."
     mm7_display = f"${mm7:,.2f}" if mm7 else "..."
-
-    tabs = ""
-    for c in PARES:
-        active = "background:#f0a500;color:#0d0d1a;" if c == cripto else "background:#16213e;color:#f0a500;"
-        tabs += f'<a href="/?lang={lang}&cripto={c}" style="{active} padding:8px 16px; border-radius:20px; text-decoration:none; font-weight:bold; font-size:14px; border:1px solid #f0a500;">{c}</a> '
 
     html = f"""
     <html>
@@ -169,6 +166,9 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
             .analisis-texto {{ font-size: 15px; line-height: 1.6; color: #ddd; }}
             .footer {{ text-align: center; color: #555; font-size: 12px; padding: 10px; }}
             .ind-label {{ font-size: 11px; color: #aaa; text-transform: uppercase; margin-bottom: 8px; text-align: center; }}
+            .tab-btn {{ padding: 8px 16px; border-radius: 20px; text-decoration: none; font-weight: bold; font-size: 14px; border: 1px solid #f0a500; }}
+            .tab-active {{ background: #f0a500; color: #0d0d1a; }}
+            .tab-inactive {{ background: #16213e; color: #f0a500; }}
         </style>
     </head>
     <body>
@@ -178,15 +178,16 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
             <div class="tagline">AI-Powered Crypto Trading Signal</div>
         </div>
 
- <div style="display:flex;justify-content:center;gap:8px;padding:15px;flex-wrap:wrap;background:#0d0d1a;">
-            <a href="/?lang={lang}&cripto=BTC" style="background:{'#f0a500' if cripto=='BTC' else '#16213e'};color:{'#0d0d1a' if cripto=='BTC' else '#f0a500'};padding:8px 16px;border-radius:20px;text-decoration:none;font-weight:bold;font-size:14px;border:1px solid #f0a500;">BTC</a>
-            <a href="/?lang={lang}&cripto=ETH" style="background:{'#f0a500' if cripto=='ETH' else '#16213e'};color:{'#0d0d1a' if cripto=='ETH' else '#f0a500'};padding:8px 16px;border-radius:20px;text-decoration:none;font-weight:bold;font-size:14px;border:1px solid #f0a500;">ETH</a>
-            <a href="/?lang={lang}&cripto=SOL" style="background:{'#f0a500' if cripto=='SOL' else '#16213e'};color:{'#0d0d1a' if cripto=='SOL' else '#f0a500'};padding:8px 16px;border-radius:20px;text-decoration:none;font-weight:bold;font-size:14px;border:1px solid #f0a500;">SOL</a>
-            <a href="/?lang={lang}&cripto=BNB" style="background:{'#f0a500' if cripto=='BNB' else '#16213e'};color:{'#0d0d1a' if cripto=='BNB' else '#f0a500'};padding:8px 16px;border-radius:20px;text-decoration:none;font-weight:bold;font-size:14px;border:1px solid #f0a500;">BNB</a>
-            <a href="/?lang={lang}&cripto=XRP" style="background:{'#f0a500' if cripto=='XRP' else '#16213e'};color:{'#0d0d1a' if cripto=='XRP' else '#f0a500'};padding:8px 16px;border-radius:20px;text-decoration:none;font-weight:bold;font-size:14px;border:1px solid #f0a500;">XRP</a>
-            <a href="/resumen?lang={lang}" style="background:#f0a500;color:#0d0d1a;padding:8px 16px;border-radius:20px;text-decoration:none;font-weight:bold;font-size:14px;border:1px solid #f0a500;">📊</a>
+        <div class="tabs">
+            <a href="/?lang={lang}&cripto=BTC" class="tab-btn {'tab-active' if cripto=='BTC' else 'tab-inactive'}">BTC</a>
+            <a href="/?lang={lang}&cripto=ETH" class="tab-btn {'tab-active' if cripto=='ETH' else 'tab-inactive'}">ETH</a>
+            <a href="/?lang={lang}&cripto=SOL" class="tab-btn {'tab-active' if cripto=='SOL' else 'tab-inactive'}">SOL</a>
+            <a href="/?lang={lang}&cripto=BNB" class="tab-btn {'tab-active' if cripto=='BNB' else 'tab-inactive'}">BNB</a>
+            <a href="/?lang={lang}&cripto=XRP" class="tab-btn {'tab-active' if cripto=='XRP' else 'tab-inactive'}">XRP</a>
+            <a href="/resumen?lang={lang}" class="tab-btn tab-inactive">{label_resumen}</a>
         </div>
-            
+
+        <div class="container">
             <div class="precio-card">
                 <div class="label-precio">{label_precio} — {par["nombre"]}</div>
                 <div class="precio">${precio:,.2f}</div>
@@ -222,7 +223,7 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
             <div style="text-align:center; margin-bottom:15px;">
                 <a href="https://wa.me/?text=🤖 BitMind - Crypto Trading con IA%0A💰 {par['nombre']}: ${precio:,.2f}%0A📊 Señal: {decision}%0A👉 https://bot-traiding-btc.onrender.com"
                    target="_blank"
-                   style="background: #25D366; color: white; padding: 12px 25px; border-radius: 30px; text-decoration: none; font-size: 16px; font-weight: bold;">
+                   style="background:#25D366;color:white;padding:12px 25px;border-radius:30px;text-decoration:none;font-size:16px;font-weight:bold;">
                     📲 Compartir en WhatsApp
                 </a>
             </div>
@@ -263,6 +264,8 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
     </html>
     """
     return html
+
+
 @app.get("/resumen", response_class=HTMLResponse)
 def resumen(lang: str = Query("es")):
     datos = []
