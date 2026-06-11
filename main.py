@@ -109,7 +109,6 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
         label_rsi = "RSI"
         label_mm = "Media Móvil 7"
         label_indicadores = "Indicadores Técnicos"
-        label_resumen = "📊 Resumen"
         rsi_zona = "Sobrevendido 🟢" if rsi and rsi < 30 else "Sobrecomprado 🔴" if rsi and rsi > 70 else "Neutral 🟡"
     else:
         tendencia_txt = "SUBINDO ↗" if subiendo else "CAINDO ↘" if subiendo is not None else "ESTÁVEL →"
@@ -122,7 +121,6 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
         label_rsi = "RSI"
         label_mm = "Média Móvel 7"
         label_indicadores = "Indicadores Técnicos"
-        label_resumen = "📊 Resumo"
         rsi_zona = "Sobrevendido 🟢" if rsi and rsi < 30 else "Sobrecomprado 🔴" if rsi and rsi > 70 else "Neutro 🟡"
 
     decision = decisiones[decision_key]
@@ -184,7 +182,8 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
             <a href="/?lang={lang}&cripto=SOL" class="tab-btn {'tab-active' if cripto=='SOL' else 'tab-inactive'}">SOL</a>
             <a href="/?lang={lang}&cripto=BNB" class="tab-btn {'tab-active' if cripto=='BNB' else 'tab-inactive'}">BNB</a>
             <a href="/?lang={lang}&cripto=XRP" class="tab-btn {'tab-active' if cripto=='XRP' else 'tab-inactive'}">XRP</a>
-            <a href="/resumen?lang={lang}" class="tab-btn tab-inactive">{label_resumen}</a>
+            <a href="/resumen?lang={lang}" class="tab-btn tab-inactive">📊</a>
+            <a href="/about?lang={lang}" class="tab-btn tab-inactive">ℹ️</a>
         </div>
 
         <div class="container">
@@ -342,6 +341,176 @@ def resumen(lang: str = Query("es")):
             <div style="text-align:center;color:#555;font-size:12px;padding:10px;">
                 Se actualiza cada 30 seg
             </div>
+        </div>
+    </body>
+    </html>
+    """
+
+
+@app.get("/about", response_class=HTMLResponse)
+def about(lang: str = Query("es")):
+    btn_lang = "🇧🇷 Português" if lang == "es" else "🇪🇸 Español"
+    btn_url = f"/about?lang={'pt' if lang == 'es' else 'es'}"
+    home_txt = "← Volver" if lang == "es" else "← Voltar"
+
+    if lang == "es":
+        titulo = "¿Qué es BitMind?"
+        contenido = """
+        <div class="seccion">
+            <h2>🤖 ¿Qué es BitMind?</h2>
+            <p>BitMind es una plataforma de señales de trading con Inteligencia Artificial que analiza el mercado de criptomonedas en tiempo real, combinando análisis técnico y machine learning para darte ventaja en tus decisiones.</p>
+        </div>
+        <div class="seccion">
+            <h2>📈 La Tendencia — El Rey del Trading</h2>
+            <p>Los traders profesionales dicen: <em>"La tendencia es tu amiga"</em>. El 80% de las ganancias en trading vienen de operar a favor de la tendencia, nunca contra ella.</p>
+            <div class="card-tend alcista">
+                <div class="tend-titulo">📈 Tendencia Alcista — SUBIENDO</div>
+                <p>El precio hace máximos y mínimos cada vez más altos. Es el mejor momento para comprar y mantener posición. El mercado tiene fuerza compradora.</p>
+            </div>
+            <div class="card-tend bajista">
+                <div class="tend-titulo">📉 Tendencia Bajista — BAJANDO</div>
+                <p>El precio hace máximos y mínimos cada vez más bajos. Momento de vender o mantenerse fuera del mercado. Los vendedores tienen el control.</p>
+            </div>
+            <div class="card-tend lateral">
+                <div class="tend-titulo">➡️ Tendencia Lateral — ESTABLE</div>
+                <p>El precio oscila entre dos niveles sin dirección clara. Esperá una ruptura antes de entrar al mercado.</p>
+            </div>
+        </div>
+        <div class="seccion">
+            <h2>📊 Indicadores que usamos</h2>
+            <div class="indicador">
+                <div class="ind-nombre">RSI — Índice de Fuerza Relativa</div>
+                <p>Mide si el mercado está sobrecomprado o sobrevendido.</p>
+                <div class="ind-reglas">
+                    <span class="regla compra">RSI &lt; 30 → Sobrevendido → Oportunidad de COMPRA</span>
+                    <span class="regla venta">RSI &gt; 70 → Sobrecomprado → Señal de VENTA</span>
+                    <span class="regla neutral">RSI 30-70 → Zona Neutral → ESPERAR</span>
+                </div>
+            </div>
+            <div class="indicador">
+                <div class="ind-nombre">Media Móvil de 7 períodos</div>
+                <p>Suaviza las fluctuaciones del precio para identificar la tendencia real. Si el precio está por encima de la media móvil, la tendencia es alcista. Si está por debajo, es bajista.</p>
+            </div>
+            <div class="indicador">
+                <div class="ind-nombre">🧠 IA + Tendencia</div>
+                <p>Nuestra IA combina la dirección del precio con el RSI y la Media Móvil para confirmar si la tendencia es real o una trampa del mercado, generando un análisis claro en segundos.</p>
+            </div>
+        </div>
+        <div class="seccion">
+            <h2>🚦 ¿Qué significan las señales?</h2>
+            <div class="senal compra-card">🟢 COMPRAR — Precio en zona de valor, buena oportunidad de entrada</div>
+            <div class="senal venta-card">🔴 VENDER — Precio sobrevaluado, momento de tomar ganancias</div>
+            <div class="senal espera-card">🟡 ESPERAR — Mercado indeciso, aguardar confirmación</div>
+        </div>
+        <div class="seccion aviso">
+            <h2>⚠️ Aviso Legal</h2>
+            <p>BitMind es una herramienta informativa basada en análisis técnico e inteligencia artificial. Las señales NO son asesoría financiera. Toda decisión de inversión es responsabilidad del usuario. Invertir en criptomonedas implica riesgo de pérdida de capital.</p>
+        </div>
+        """
+    else:
+        titulo = "O que é BitMind?"
+        contenido = """
+        <div class="seccion">
+            <h2>🤖 O que é BitMind?</h2>
+            <p>BitMind é uma plataforma de sinais de trading com Inteligência Artificial que analisa o mercado de criptomoedas em tempo real, combinando análise técnica e machine learning para te dar vantagem nas suas decisões.</p>
+        </div>
+        <div class="seccion">
+            <h2>📈 A Tendência — O Rei do Trading</h2>
+            <p>Os traders profissionais dizem: <em>"A tendência é sua amiga"</em>. 80% dos lucros no trading vêm de operar a favor da tendência, nunca contra ela.</p>
+            <div class="card-tend alcista">
+                <div class="tend-titulo">📈 Tendência de Alta — SUBINDO</div>
+                <p>O preço faz máximas e mínimas cada vez mais altas. É o melhor momento para comprar e manter posição. O mercado tem força compradora.</p>
+            </div>
+            <div class="card-tend bajista">
+                <div class="tend-titulo">📉 Tendência de Baixa — CAINDO</div>
+                <p>O preço faz máximas e mínimas cada vez mais baixas. Momento de vender ou ficar fora do mercado. Os vendedores estão no controle.</p>
+            </div>
+            <div class="card-tend lateral">
+                <div class="tend-titulo">➡️ Tendência Lateral — ESTÁVEL</div>
+                <p>O preço oscila entre dois níveis sem direção clara. Aguarde uma ruptura antes de entrar no mercado.</p>
+            </div>
+        </div>
+        <div class="seccion">
+            <h2>📊 Indicadores que usamos</h2>
+            <div class="indicador">
+                <div class="ind-nombre">RSI — Índice de Força Relativa</div>
+                <p>Mede se o mercado está sobrecomprado ou sobrevendido.</p>
+                <div class="ind-reglas">
+                    <span class="regla compra">RSI &lt; 30 → Sobrevendido → Oportunidade de COMPRA</span>
+                    <span class="regla venta">RSI &gt; 70 → Sobrecomprado → Sinal de VENDA</span>
+                    <span class="regla neutral">RSI 30-70 → Zona Neutra → AGUARDAR</span>
+                </div>
+            </div>
+            <div class="indicador">
+                <div class="ind-nombre">Média Móvel de 7 períodos</div>
+                <p>Suaviza as flutuações do preço para identificar a tendência real. Se o preço está acima da média móvel, a tendência é de alta. Se está abaixo, é de baixa.</p>
+            </div>
+            <div class="indicador">
+                <div class="ind-nombre">🧠 IA + Tendência</div>
+                <p>Nossa IA combina a direção do preço com o RSI e a Média Móvel para confirmar se a tendência é real ou uma armadilha do mercado, gerando uma análise clara em segundos.</p>
+            </div>
+        </div>
+        <div class="seccion">
+            <h2>🚦 O que significam os sinais?</h2>
+            <div class="senal compra-card">🟢 COMPRAR — Preço em zona de valor, boa oportunidade de entrada</div>
+            <div class="senal venta-card">🔴 VENDER — Preço sobrevalorizado, momento de realizar lucros</div>
+            <div class="senal espera-card">🟡 AGUARDAR — Mercado indeciso, esperar confirmação</div>
+        </div>
+        <div class="seccion aviso">
+            <h2>⚠️ Aviso Legal</h2>
+            <p>BitMind é uma ferramenta informativa baseada em análise técnica e inteligência artificial. Os sinais NÃO são assessoria financeira. Toda decisão de investimento é responsabilidade do usuário. Investir em criptomoedas implica risco de perda de capital.</p>
+        </div>
+        """
+
+    return f"""
+    <html>
+    <head>
+        <title>BitMind — {titulo}</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+            body {{ font-family: Arial, sans-serif; background: #0d0d1a; color: white; min-height: 100vh; }}
+            .header {{ background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 20px; text-align: center; border-bottom: 2px solid #f0a500; position: relative; }}
+            .logo {{ font-size: 28px; font-weight: bold; color: #f0a500; letter-spacing: 2px; }}
+            .logo span {{ color: white; }}
+            .lang-btn {{ position: absolute; top: 20px; right: 15px; background: #16213e; border: 1px solid #f0a500; color: #f0a500; padding: 6px 12px; border-radius: 20px; text-decoration: none; font-size: 13px; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px 15px; }}
+            .seccion {{ background: #16213e; border-radius: 16px; padding: 20px; margin-bottom: 15px; border: 1px solid #ffffff11; }}
+            .seccion h2 {{ color: #f0a500; font-size: 18px; margin-bottom: 12px; }}
+            .seccion p {{ font-size: 15px; line-height: 1.7; color: #ddd; margin-bottom: 10px; }}
+            .seccion em {{ color: #f0a500; font-style: italic; }}
+            .card-tend {{ border-radius: 12px; padding: 15px; margin: 10px 0; }}
+            .alcista {{ background: #0d2b1a; border-left: 4px solid #00ff88; }}
+            .bajista {{ background: #2b0d0d; border-left: 4px solid #ff4444; }}
+            .lateral {{ background: #2b2b0d; border-left: 4px solid orange; }}
+            .tend-titulo {{ font-weight: bold; font-size: 16px; margin-bottom: 8px; }}
+            .alcista .tend-titulo {{ color: #00ff88; }}
+            .bajista .tend-titulo {{ color: #ff4444; }}
+            .lateral .tend-titulo {{ color: orange; }}
+            .indicador {{ background: #0d0d2b; border-radius: 12px; padding: 15px; margin: 10px 0; }}
+            .ind-nombre {{ color: #f0a500; font-weight: bold; font-size: 15px; margin-bottom: 8px; }}
+            .ind-reglas {{ display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }}
+            .regla {{ padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: bold; }}
+            .compra {{ background: #0d2b1a; color: #00ff88; }}
+            .venta {{ background: #2b0d0d; color: #ff4444; }}
+            .neutral {{ background: #2b2b0d; color: orange; }}
+            .senal {{ padding: 12px 16px; border-radius: 12px; margin: 8px 0; font-weight: bold; font-size: 15px; }}
+            .compra-card {{ background: #0d2b1a; color: #00ff88; border: 1px solid #00ff88; }}
+            .venta-card {{ background: #2b0d0d; color: #ff4444; border: 1px solid #ff4444; }}
+            .espera-card {{ background: #2b2b0d; color: orange; border: 1px solid orange; }}
+            .aviso {{ border-left: 4px solid #ff4444; }}
+            .aviso h2 {{ color: #ff4444; }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <a href="{btn_url}" class="lang-btn">{btn_lang}</a>
+            <div class="logo">Bit<span>Mind</span></div>
+            <div style="font-size:14px;color:#aaa;margin-top:4px;">{titulo}</div>
+        </div>
+        <div class="container">
+            <a href="/?lang={lang}" style="color:#f0a500;font-size:14px;display:block;margin-bottom:15px;">{home_txt}</a>
+            {contenido}
         </div>
     </body>
     </html>
