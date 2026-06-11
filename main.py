@@ -186,12 +186,7 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
             <a href="/?lang={lang}&cripto=XRP" style="background:{'#f0a500' if cripto=='XRP' else '#16213e'};color:{'#0d0d1a' if cripto=='XRP' else '#f0a500'};padding:8px 16px;border-radius:20px;text-decoration:none;font-weight:bold;font-size:14px;border:1px solid #f0a500;">XRP</a>
             <a href="/resumen?lang={lang}" style="background:#f0a500;color:#0d0d1a;padding:8px 16px;border-radius:20px;text-decoration:none;font-weight:bold;font-size:14px;border:1px solid #f0a500;">📊</a>
         </div>
-            <a href="/?lang={lang}&cripto=BTC" style="background:{'#f0a500' if cripto=='BTC' else '#16213e'};color:{'#0d0d1a' if cripto=='BTC' else '#f0a500'};padding:8px 16px;border-radius:20px;text-decoration:none;font-weight:bold;font-size:14px;border:1px solid #f0a500;">BTC</a>
-            <a href="/?lang={lang}&cripto=ETH" style="background:{'#f0a500' if cripto=='ETH' else '#16213e'};color:{'#0d0d1a' if cripto=='ETH' else '#f0a500'};padding:8px 16px;border-radius:20px;text-decoration:none;font-weight:bold;font-size:14px;border:1px solid #f0a500;">ETH</a>
-            <a href="/?lang={lang}&cripto=SOL" style="background:{'#f0a500' if cripto=='SOL' else '#16213e'};color:{'#0d0d1a' if cripto=='SOL' else '#f0a500'};padding:8px 16px;border-radius:20px;text-decoration:none;font-weight:bold;font-size:14px;border:1px solid #f0a500;">SOL</a>
-            <a href="/?lang={lang}&cripto=BNB" style="background:{'#f0a500' if cripto=='BNB' else '#16213e'};color:{'#0d0d1a' if cripto=='BNB' else '#f0a500'};padding:8px 16px;border-radius:20px;text-decoration:none;font-weight:bold;font-size:14px;border:1px solid #f0a500;">BNB</a>
-            <a href="/?lang={lang}&cripto=XRP" style="background:{'#f0a500' if cripto=='XRP' else '#16213e'};color:{'#0d0d1a' if cripto=='XRP' else '#f0a500'};padding:8px 16px;border-radius:20px;text-decoration:none;font-weight:bold;font-size:14px;border:1px solid #f0a500;">XRP</a>
-        </div>
+            
             <div class="precio-card">
                 <div class="label-precio">{label_precio} — {par["nombre"]}</div>
                 <div class="precio">${precio:,.2f}</div>
