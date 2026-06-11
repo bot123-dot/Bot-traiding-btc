@@ -202,6 +202,13 @@ def inicio(lang: str = Query("es")):
                 <div class="analisis-texto">{analisis}</div>
             </div>
 
+            <div style="text-align:center; margin-bottom:15px;">
+                <a href="https://wa.me/?text=🤖 CryptoMind - Bot Trading BTC con IA%0A💰 Precio: ${precio:,.2f}%0A📊 Señal: {decision}%0A👉 https://bot-traiding-btc.onrender.com" 
+                   target="_blank"
+                   style="background: #25D366; color: white; padding: 12px 25px; border-radius: 30px; text-decoration: none; font-size: 16px; font-weight: bold;">
+                    📲 Compartir en WhatsApp
+                </a>
+            </div>
             <div class="footer">
                 {label_actualizado}: {hora} | {label_cada}
             </div>
