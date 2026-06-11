@@ -19,9 +19,9 @@ def analisis_ia(precio, tendencia):
         model="claude-haiku-4-5",
         max_tokens=150,
         messages=[{
-            "role": "user",
-            "content": f"El precio del Bitcoin es ${precio:,.2f} USD con tendencia {tendencia}. Dame un análisis de mercado breve en 2 frases, en español."
-        }]
+    "role": "user",
+    "content": f"El precio del Bitcoin es ${precio:,.2f} USD con tendencia {tendencia}. Dame exactamente 2 frases de análisis en español. Sin títulos, sin markdown, sin asteriscos. Solo texto limpio."
+}]
     )
     return mensaje.content[0].text
 
