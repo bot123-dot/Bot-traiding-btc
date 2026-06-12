@@ -8,6 +8,7 @@ app = FastAPI()
 client = Anthropic()
 
 historiales = {"BTC": [], "ETH": [], "SOL": [], "BNB": [], "XRP": []}
+visitas = {"total": 0, "BTC": 0, "ETH": 0, "SOL": 0, "BNB": 0, "XRP": 0, "resumen": 0, "about": 0}
 
 PARES = {
     "BTC": {"nombre": "Bitcoin", "simbolo": "BTC-USD", "comprar": 60000, "vender": 65000},
@@ -62,8 +63,12 @@ def hora_brasil():
 
 @app.get("/", response_class=HTMLResponse)
 def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
+    global visitas
     if cripto not in PARES:
         cripto = "BTC"
+
+    visitas["total"] += 1
+    visitas[cripto] += 1
 
     par = PARES[cripto]
     precio = obtener_precio(par["simbolo"])
@@ -267,6 +272,10 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
 
 @app.get("/resumen", response_class=HTMLResponse)
 def resumen(lang: str = Query("es")):
+    global visitas
+    visitas["total"] += 1
+    visitas["resumen"] += 1
+
     datos = []
     for cripto, par in PARES.items():
         try:
@@ -349,6 +358,10 @@ def resumen(lang: str = Query("es")):
 
 @app.get("/about", response_class=HTMLResponse)
 def about(lang: str = Query("es")):
+    global visitas
+    visitas["total"] += 1
+    visitas["about"] += 1
+
     btn_lang = "🇧🇷 Português" if lang == "es" else "🇪🇸 Español"
     btn_url = f"/about?lang={'pt' if lang == 'es' else 'es'}"
     home_txt = "← Volver" if lang == "es" else "← Voltar"
@@ -511,6 +524,76 @@ def about(lang: str = Query("es")):
         <div class="container">
             <a href="/?lang={lang}" style="color:#f0a500;font-size:14px;display:block;margin-bottom:15px;">{home_txt}</a>
             {contenido}
+        </div>
+    </body>
+    </html>
+    """
+
+
+@app.get("/stats", response_class=HTMLResponse)
+def stats():
+    return f"""
+    <html>
+    <head>
+        <title>BitMind — Stats</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="refresh" content="30">
+        <style>
+            * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+            body {{ font-family: Arial, sans-serif; background: #0d0d1a; color: white; min-height: 100vh; }}
+            .header {{ background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 20px; text-align: center; border-bottom: 2px solid #f0a500; }}
+            .logo {{ font-size: 28px; font-weight: bold; color: #f0a500; letter-spacing: 2px; }}
+            .logo span {{ color: white; }}
+            .container {{ max-width: 600px; margin: 0 auto; padding: 20px 15px; }}
+            .total {{ background: #16213e; border-radius: 16px; padding: 25px; text-align: center; margin-bottom: 15px; border: 2px solid #f0a500; }}
+            .total-num {{ font-size: 60px; font-weight: bold; color: #f0a500; }}
+            .total-txt {{ font-size: 14px; color: #aaa; margin-top: 5px; }}
+            .card {{ background: #16213e; border-radius: 12px; padding: 15px 20px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #ffffff11; }}
+            .card-nombre {{ font-size: 18px; font-weight: bold; color: #f0a500; }}
+            .card-num {{ font-size: 24px; font-weight: bold; color: white; }}
+            .aviso {{ text-align: center; color: #555; font-size: 12px; padding: 15px; }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <div class="logo">Bit<span>Mind</span></div>
+            <div style="font-size:14px;color:#aaa;margin-top:4px;">Dashboard de Visitas</div>
+        </div>
+        <div class="container">
+            <a href="/" style="color:#f0a500;font-size:14px;display:block;margin-bottom:15px;">← Volver</a>
+            <div class="total">
+                <div class="total-num">{visitas['total']}</div>
+                <div class="total-txt">Total de visitas</div>
+            </div>
+            <div class="card">
+                <div class="card-nombre">₿ Bitcoin</div>
+                <div class="card-num">{visitas['BTC']}</div>
+            </div>
+            <div class="card">
+                <div class="card-nombre">Ξ Ethereum</div>
+                <div class="card-num">{visitas['ETH']}</div>
+            </div>
+            <div class="card">
+                <div class="card-nombre">◎ Solana</div>
+                <div class="card-num">{visitas['SOL']}</div>
+            </div>
+            <div class="card">
+                <div class="card-nombre">⬡ BNB</div>
+                <div class="card-num">{visitas['BNB']}</div>
+            </div>
+            <div class="card">
+                <div class="card-nombre">✕ XRP</div>
+                <div class="card-num">{visitas['XRP']}</div>
+            </div>
+            <div class="card">
+                <div class="card-nombre">📊 Resumen</div>
+                <div class="card-num">{visitas['resumen']}</div>
+            </div>
+            <div class="card">
+                <div class="card-nombre">ℹ️ About</div>
+                <div class="card-num">{visitas['about']}</div>
+            </div>
+            <div class="aviso">⚠️ Las visitas se reinician cuando el servidor duerme</div>
         </div>
     </body>
     </html>
