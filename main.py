@@ -202,6 +202,14 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
             .tab-active {{ background: #f0a500; color: #0d0d1a; }}
             .tab-inactive {{ background: #16213e; color: #f0a500; }}
         </style>
+        <!-- Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-2BEW66V56L"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){{dataLayer.push(arguments);}}
+  gtag('js', new Date());
+  gtag('config', 'G-2BEW66V56L');
+</script>
     </head>
     <body>
         <div class="header">
