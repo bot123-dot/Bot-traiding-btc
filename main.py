@@ -5,6 +5,35 @@ from anthropic import Anthropic
 from datetime import datetime, timezone, timedelta
 from fastapi import Request, Response, Form
 from fastapi.responses import RedirectResponse
+# ── AUTH ROUTES ──────────────────────────────────────
+@app.post("/registro")
+async def registro(email: str = Form(...), password: str = Form(...)):
+    return register_user(email, password)
+
+@app.post("/login")
+async def login(email: str = Form(...), password: str = Form(...), response: Response = None):
+    return login_user(email, password, response)
+
+@app.post("/logout")
+async def logout(request: Request, response: Response):
+    return logout_user(response, request)
+
+# ── PAYMENT ROUTES ───────────────────────────────────
+@app.get("/pagar/stripe/{plan}")
+async def pagar_stripe(plan: str, request: Request):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse("/login")
+    url = crear_sesion_stripe(user["email"], plan)
+    return RedirectResponse(url)
+
+@app.get("/pagar/mp/{plan}")
+async def pagar_mp(plan: str, request: Request):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse("/login")
+    url = crear_pago_mp(user["email"], plan)
+    return RedirectResponse(url)
 from auth import login_user, logout_user, register_user, get_current_user
 from payments import crear_sesion_stripe, crear_pago_mp
 app = FastAPI()
