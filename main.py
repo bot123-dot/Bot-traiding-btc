@@ -9,7 +9,33 @@ from auth import login_user, logout_user, register_user, get_current_user
 from payments import crear_sesion_stripe, crear_pago_mp
 app = FastAPI()
 client = Anthropic()
+@app.post("/registro")
+async def registro(email: str = Form(...), password: str = Form(...)):
+    return register_user(email, password)
 
+@app.post("/login")
+async def login(email: str = Form(...), password: str = Form(...), response: Response = None):
+    return login_user(email, password, response)
+
+@app.post("/logout")
+async def logout(request: Request, response: Response):
+    return logout_user(response, request)
+
+@app.get("/pagar/stripe/{plan}")
+async def pagar_stripe(plan: str, request: Request):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse("/login")
+    url = crear_sesion_stripe(user["email"], plan)
+    return RedirectResponse(url)
+
+@app.get("/pagar/mp/{plan}")
+async def pagar_mp(plan: str, request: Request):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse("/login")
+    url = crear_pago_mp(user["email"], plan)
+    return RedirectResponse(url)
 historiales = {"BTC": [], "ETH": [], "SOL": [], "BNB": [], "XRP": []}
 visitas = {"total": 0, "BTC": 0, "ETH": 0, "SOL": 0, "BNB": 0, "XRP": 0, "resumen": 0, "about": 0}
 
