@@ -701,3 +701,82 @@ li{padding:8px 0;border-bottom:1px solid #30363d}
 </body>
 </html>
 """
+@app.get("/login", response_class=HTMLResponse)
+def pagina_login():
+    return """
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BitMind - Login</title>
+<style>
+body{background:#0d1117;color:#fff;font-family:Arial;margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh}
+.box{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:40px;width:300px;text-align:center}
+h1{color:#f7931a}
+input{width:100%;padding:12px;margin:8px 0;border-radius:8px;border:1px solid #30363d;background:#0d1117;color:#fff;box-sizing:border-box}
+.btn{width:100%;padding:12px;border-radius:8px;border:none;font-weight:bold;cursor:pointer;margin-top:8px}
+.btn-login{background:#f7931a;color:#000}
+.btn-registro{background:#30363d;color:#fff}
+.tabs{display:flex;margin-bottom:20px}
+.tab{flex:1;padding:10px;cursor:pointer;border-bottom:2px solid #30363d}
+.tab.active{border-bottom:2px solid #f7931a;color:#f7931a}
+a{color:#f7931a}
+</style>
+</head>
+<body>
+<div class="box">
+<h1>🟠 BitMind</h1>
+<div class="tabs">
+<div class="tab active" onclick="showLogin()">Login</div>
+<div class="tab" onclick="showRegistro()">Registro</div>
+</div>
+<div id="login-form">
+<input type="email" id="email-l" placeholder="Email">
+<input type="password" id="senha-l" placeholder="Senha">
+<button class="btn btn-login" onclick="login()">Entrar</button>
+</div>
+<div id="registro-form" style="display:none">
+<input type="email" id="email-r" placeholder="Email">
+<input type="password" id="senha-r" placeholder="Senha (min 6 caracteres)">
+<button class="btn btn-login" onclick="registro()">Criar conta</button>
+</div>
+<br><a href="/">← Voltar</a>
+</div>
+<script>
+function showLogin(){
+  document.getElementById('login-form').style.display='block';
+  document.getElementById('registro-form').style.display='none';
+  document.querySelectorAll('.tab')[0].classList.add('active');
+  document.querySelectorAll('.tab')[1].classList.remove('active');
+}
+function showRegistro(){
+  document.getElementById('login-form').style.display='none';
+  document.getElementById('registro-form').style.display='block';
+  document.querySelectorAll('.tab')[0].classList.remove('active');
+  document.querySelectorAll('.tab')[1].classList.add('active');
+}
+async function login(){
+  const email=document.getElementById('email-l').value;
+  const senha=document.getElementById('senha-l').value;
+  const fd=new FormData();
+  fd.append('email',email);fd.append('password',senha);
+  const r=await fetch('/login',{method:'POST',body:fd});
+  const d=await r.json();
+  if(r.ok){window.location.href='/';}
+  else{alert(d.detail);}
+}
+async function registro(){
+  const email=document.getElementById('email-r').value;
+  const senha=document.getElementById('senha-r').value;
+  const fd=new FormData();
+  fd.append('email',email);fd.append('password',senha);
+  const r=await fetch('/registro',{method:'POST',body:fd});
+  const d=await r.json();
+  if(r.ok){alert('Conta criada! Faça login.');showLogin();}
+  else{alert(d.detail);}
+}
+</script>
+</body>
+</html>
+"""
