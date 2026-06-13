@@ -4,7 +4,9 @@ import requests
 from anthropic import Anthropic
 from datetime import datetime, timezone, timedelta
 from fastapi import Request, Response, Form
-
+from fastapi.responses import RedirectResponse
+from auth import login_user, logout_user, register_user, get_current_user
+from payments import crear_sesion_stripe, crear_pago_mp
 app = FastAPI()
 client = Anthropic()
 
