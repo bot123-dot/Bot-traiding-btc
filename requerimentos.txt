@@ -2,3 +2,6 @@ fastapi
 uvicorn
 requests
 anthropic
+stripe
+mercadopago
+python-multipart
