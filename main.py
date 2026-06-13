@@ -627,3 +627,77 @@ def stats():
     </body>
     </html>
     """
+@app.get("/precios", response_class=HTMLResponse)
+def precios():
+    return """
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BitMind - Planos</title>
+<style>
+body{background:#0d1117;color:#fff;font-family:Arial;margin:0;padding:20px;text-align:center}
+h1{color:#f7931a;font-size:2em}
+.planes{display:flex;justify-content:center;gap:20px;flex-wrap:wrap;margin-top:30px}
+.plan{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:30px;width:250px}
+.plan.pro{border-color:#f7931a}
+.plan h2{color:#f7931a;font-size:1.5em}
+.price{font-size:2.5em;font-weight:bold;margin:15px 0}
+.price span{font-size:0.4em;color:#aaa}
+ul{list-style:none;padding:0;text-align:left}
+li{padding:8px 0;border-bottom:1px solid #30363d}
+.btn{display:block;margin-top:20px;padding:12px;border-radius:8px;text-decoration:none;font-weight:bold}
+.btn-free{background:#30363d;color:#fff}
+.btn-pro{background:#f7931a;color:#000}
+.btn-trader{background:#fff;color:#000}
+.badge{background:#f7931a;color:#000;padding:3px 10px;border-radius:20px;font-size:0.7em}
+</style>
+</head>
+<body>
+<h1>🟠 BitMind</h1>
+<p>Escolha seu plano de análise cripto com IA</p>
+<div class="planes">
+<div class="plan">
+<h2>Free</h2>
+<div class="price">R$0<span>/mês</span></div>
+<ul>
+<li>✅ Preço BTC em tempo real</li>
+<li>✅ Sinal básico</li>
+<li>❌ Análise IA</li>
+<li>❌ Múltiplas moedas</li>
+<li>❌ Alertas</li>
+</ul>
+<a href="/" class="btn btn-free">Usar Grátis</a>
+</div>
+<div class="plan pro">
+<h2>Pro <span class="badge">POPULAR</span></h2>
+<div class="price">R$29<span>/mês</span></div>
+<ul>
+<li>✅ Tudo do Free</li>
+<li>✅ Análise IA completa</li>
+<li>✅ BTC, ETH, SOL, BNB, XRP</li>
+<li>✅ Alertas em tempo real</li>
+<li>✅ Histórico avançado</li>
+</ul>
+<a href="/pagar/mp/pro" class="btn btn-pro">Assinar com PIX</a>
+<a href="/pagar/stripe/pro" class="btn btn-free" style="margin-top:8px">Assinar com Cartão</a>
+</div>
+<div class="plan">
+<h2>Trader</h2>
+<div class="price">R$79<span>/mês</span></div>
+<ul>
+<li>✅ Tudo do Pro</li>
+<li>✅ Sinais avançados</li>
+<li>✅ Suporte prioritário</li>
+<li>✅ Relatórios diários</li>
+<li>✅ API access</li>
+</ul>
+<a href="/pagar/mp/trader" class="btn btn-trader">Assinar com PIX</a>
+<a href="/pagar/stripe/trader" class="btn btn-free" style="margin-top:8px">Assinar com Cartão</a>
+</div>
+</div>
+<br><a href="/" style="color:#f7931a">← Voltar ao Dashboard</a>
+</body>
+</html>
+"""
