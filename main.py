@@ -218,8 +218,8 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
             <a href="/?lang={lang}&cripto=XRP" class="tab-btn {'tab-active' if cripto=='XRP' else 'tab-inactive'}">XRP</a>
             <a href="/resumen?lang={lang}" class="tab-btn tab-inactive">📊</a>
             <a href="/about?lang={lang}" class="tab-btn tab-inactive">ℹ️</a>
+        <a href="/precios?lang={lang}" class="tab-btn tab-inactive">💎 Planos</a>
         </div>
-<a href="/precios?lang={lang}" class="tab-btn tab-inactive">💎 Planos</a>
         <div class="container">
             <div class="precio-card">
                 <div class="label-precio">{label_precio} — {par["nombre"]}</div>
