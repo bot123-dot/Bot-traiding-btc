@@ -5,11 +5,6 @@ from anthropic import Anthropic
 from datetime import datetime, timezone, timedelta
 from fastapi import Request, Response, Form
 
-        return RedirectResponse("/login")
-    url = crear_pago_mp(user["email"], plan)
-    return RedirectResponse(url)
-from auth import login_user, logout_user, register_user, get_current_user
-from payments import crear_sesion_stripe, crear_pago_mp
 app = FastAPI()
 client = Anthropic()
 
