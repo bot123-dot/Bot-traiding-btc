@@ -78,11 +78,11 @@ def analisis_ia(cripto, precio, tendencia, rsi, idioma):
     rsi_txt = f"RSI={rsi}" if rsi else "RSI insuficiente"
     mensaje = client.messages.create(
         model="claude-haiku-4-5",
-        max_tokens=120,
-        system=f"Eres un analista de criptomonedas. Responde SIEMPRE en exactamente 2 frases cortas en {lang}. NUNCA uses markdown, asteriscos, almohadillas ni títulos. Solo texto plano y directo.",
+        max_tokens=200,
+        system=f"Eres un trader profesional especialista en Smart Money Concepts (SMC). Responde en {lang}. NUNCA uses markdown, asteriscos, almohadillas ni títulos. Solo texto plano y directo. Incluye en tu análisis: estructura del mercado (BOS/CHoCH), zonas de Order Blocks, liquidez y una recomendación clara.",
         messages=[{
             "role": "user",
-            "content": f"{cripto} está en ${precio:,.2f} USD, tendencia {tendencia}, {rsi_txt}."
+            "content": f"{cripto} está en ${precio:,.2f} USD, tendencia {tendencia}, {rsi_txt}. Dame un análisis SMC breve en 3 frases máximo."
         }]
     )
     return mensaje.content[0].text
