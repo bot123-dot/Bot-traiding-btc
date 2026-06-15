@@ -3,54 +3,38 @@ from fastapi.responses import HTMLResponse
 import requests
 from anthropic import Anthropic
 from datetime import datetime, timezone, timedelta
-from fastapi import Request, Response, Form
-from fastapi.responses import RedirectResponse
-from auth import login_user, logout_user, register_user, get_current_user
-from payments import crear_sesion_stripe, crear_pago_mp
+
 app = FastAPI()
 client = Anthropic()
-@app.post("/registro")
-async def registro(email: str = Form(...), password: str = Form(...)):
-    return register_user(email, password)
 
-@app.post("/login")
-async def login(email: str = Form(...), password: str = Form(...), response: Response = None):
-    return login_user(email, password, response)
-
-@app.post("/logout")
-async def logout(request: Request, response: Response):
-    return logout_user(response, request)
-
-@app.get("/pagar/stripe/{plan}")
-async def pagar_stripe(plan: str, request: Request):
-    user = get_current_user(request)
-    if not user:
-        return RedirectResponse("/login")
-    url = crear_sesion_stripe(user["email"], plan)
-    return RedirectResponse(url)
-
-@app.get("/pagar/mp/{plan}")
-async def pagar_mp(plan: str, request: Request):
-    user = get_current_user(request)
-    if not user:
-        return RedirectResponse("/login")
-    url = crear_pago_mp(user["email"], plan)
-    return RedirectResponse(url)
 historiales = {"BTC": [], "ETH": [], "SOL": [], "BNB": [], "XRP": []}
 visitas = {"total": 0, "BTC": 0, "ETH": 0, "SOL": 0, "BNB": 0, "XRP": 0, "resumen": 0, "about": 0}
 
 PARES = {
-    "BTC": {"nombre": "Bitcoin", "simbolo": "BTC-USD", "comprar": 60000, "vender": 65000},
-    "ETH": {"nombre": "Ethereum", "simbolo": "ETH-USD", "comprar": 2800, "vender": 3500},
-    "SOL": {"nombre": "Solana", "simbolo": "SOL-USD", "comprar": 120, "vender": 180},
-    "BNB": {"nombre": "BNB", "simbolo": "BNB-USD", "comprar": 500, "vender": 650},
-    "XRP": {"nombre": "XRP", "simbolo": "XRP-USD", "comprar": 0.5, "vender": 0.8},
+    "BTC": {"nombre": "Bitcoin", "simbolo": "BTC-USD", "simbolo_cb": "BTC-USD"},
+    "ETH": {"nombre": "Ethereum", "simbolo": "ETH-USD", "simbolo_cb": "ETH-USD"},
+    "SOL": {"nombre": "Solana", "simbolo": "SOL-USD", "simbolo_cb": "SOL-USD"},
+    "BNB": {"nombre": "BNB", "simbolo": "BNB-USD", "simbolo_cb": "BNB-USD"},
+    "XRP": {"nombre": "XRP", "simbolo": "XRP-USD", "simbolo_cb": "XRP-USD"},
 }
 
 def obtener_precio(simbolo):
     url = f"https://api.coinbase.com/v2/prices/{simbolo}/spot"
     respuesta = requests.get(url)
     return float(respuesta.json()["data"]["amount"])
+
+def obtener_velas_4h(simbolo):
+    try:
+        url = f"https://api.exchange.coinbase.com/products/{simbolo}/candles?granularity=14400&limit=50"
+        respuesta = requests.get(url)
+        velas = respuesta.json()
+        # Formato: [time, low, high, open, close, volume]
+        cierres = [v[4] for v in reversed(velas)]
+        highs = [v[2] for v in reversed(velas)]
+        lows = [v[1] for v in reversed(velas)]
+        return cierres, highs, lows
+    except:
+        return [], [], []
 
 def calcular_rsi(precios, periodo=14):
     if len(precios) < periodo + 1:
@@ -68,27 +52,107 @@ def calcular_rsi(precios, periodo=14):
         return 100
     return round(100 - (100 / (1 + avg_g/avg_p)), 1)
 
-def calcular_mm(precios, periodo=7):
+def calcular_mm(precios, periodo=20):
     if len(precios) < periodo:
         return None
     return round(sum(precios[-periodo:]) / periodo, 2)
 
-def analisis_ia(cripto, precio, tendencia, rsi, idioma):
+def detectar_bos(highs, lows):
+    if len(highs) < 5:
+        return "Indeterminado"
+    ultimo_max = max(highs[-5:-1])
+    ultimo_min = min(lows[-5:-1])
+    precio_actual = highs[-1]
+    if precio_actual > ultimo_max:
+        return "Alcista (BOS ↗)"
+    elif precio_actual < ultimo_min:
+        return "Bajista (BOS ↘)"
+    return "Lateral"
+
+def detectar_order_block(cierres, highs, lows):
+    if len(cierres) < 10:
+        return None, None
+    for i in range(len(cierres)-2, max(len(cierres)-10, 0), -1):
+        if cierres[i] < cierres[i-1] and cierres[i+1] > cierres[i]:
+            ob_high = highs[i]
+            ob_low = lows[i]
+            return round(ob_low, 2), round(ob_high, 2)
+    return None, None
+
+def calcular_confluencias(precio, cierres, highs, lows):
+    confluencias = 0
+    detalles = []
+
+    rsi_4h = calcular_rsi(cierres)
+    mm20 = calcular_mm(cierres, 20)
+    mm50 = calcular_mm(cierres, 50)
+    estructura = detectar_bos(highs, lows)
+    ob_low, ob_high = detectar_order_block(cierres, highs, lows)
+
+    # Confluencia 1: RSI
+    if rsi_4h and rsi_4h < 35:
+        confluencias += 1
+        detalles.append(f"RSI sobrevendido ({rsi_4h})")
+    elif rsi_4h and rsi_4h > 65:
+        confluencias += 1
+        detalles.append(f"RSI sobrecomprado ({rsi_4h})")
+
+    # Confluencia 2: Estructura
+    if "Alcista" in estructura:
+        confluencias += 1
+        detalles.append("BOS alcista confirmado")
+    elif "Bajista" in estructura:
+        confluencias += 1
+        detalles.append("BOS bajista confirmado")
+
+    # Confluencia 3: Media Móvil
+    if mm20 and mm50:
+        if mm20 > mm50 and precio > mm20:
+            confluencias += 1
+            detalles.append("Precio sobre MM20 y MM50")
+        elif mm20 < mm50 and precio < mm20:
+            confluencias += 1
+            detalles.append("Precio bajo MM20 y MM50")
+
+    # Confluencia 4: Order Block
+    if ob_low and ob_high:
+        if ob_low <= precio <= ob_high:
+            confluencias += 1
+            detalles.append(f"Precio en OB ${ob_low}-${ob_high}")
+
+    return confluencias, detalles, rsi_4h, mm20, mm50, estructura, ob_low, ob_high
+
+def determinar_senal(precio, confluencias, detalles, estructura):
+    if confluencias >= 3:
+        if "Alcista" in estructura or any("sobrevendido" in d for d in detalles):
+            return "comprar", "#00ff88", "🟢 ALTA CONFLUENCIA"
+        elif "Bajista" in estructura or any("sobrecomprado" in d for d in detalles):
+            return "vender", "#ff4444", "🔴 ALTA CONFLUENCIA"
+    elif confluencias == 2:
+        return "esperar", "orange", "🟡 CONFLUENCIA MEDIA"
+    return "esperar", "orange", "⚪ BAJA CONFLUENCIA"
+
+def analisis_ia(cripto, precio, estructura, confluencias, detalles, rsi, idioma):
     lang = "español latinoamericano" if idioma == "es" else "português brasileiro"
-    rsi_txt = f"RSI={rsi}" if rsi else "RSI insuficiente"
+    detalles_txt = ", ".join(detalles) if detalles else "sin confluencias claras"
     mensaje = client.messages.create(
         model="claude-haiku-4-5",
         max_tokens=200,
-        system=f"Eres un trader profesional especialista en Smart Money Concepts (SMC). Responde en {lang}. NUNCA uses markdown, asteriscos, almohadillas ni títulos. Solo texto plano y directo. Incluye en tu análisis: estructura del mercado (BOS/CHoCH), zonas de Order Blocks, liquidez y una recomendación clara.",
+        system=f"Eres un trader profesional especialista en Smart Money Concepts (SMC). Responde en {lang}. NUNCA uses markdown, asteriscos, almohadillas ni títulos. Solo texto plano y directo.",
         messages=[{
             "role": "user",
-            "content": f"{cripto} está en ${precio:,.2f} USD, tendencia {tendencia}, {rsi_txt}. Dame un análisis SMC breve en 3 frases máximo."
+            "content": f"{cripto} está en ${precio:,.2f} USD. Estructura: {estructura}. Confluencias SMC detectadas ({confluencias}): {detalles_txt}. RSI 4H: {rsi}. Dame un análisis SMC en 3 frases máximo."
         }]
     )
     return mensaje.content[0].text
 
 def hora_brasil():
     return datetime.now(timezone(timedelta(hours=-3))).strftime("%H:%M:%S")
+
+def calcular_mm_simple(precios, periodo=7):
+    if len(precios) < periodo:
+        return None
+    return round(sum(precios[-periodo:]) / periodo, 2)
 
 @app.get("/", response_class=HTMLResponse)
 def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
@@ -108,8 +172,7 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
         historiales[cripto] = historiales[cripto][-48:]
 
     lista = [p["precio"] for p in historiales[cripto]]
-    rsi = calcular_rsi(lista)
-    mm7 = calcular_mm(lista)
+    mm7 = calcular_mm_simple(lista)
 
     if len(historiales[cripto]) > 1:
         diff = precio - historiales[cripto][-2]["precio"]
@@ -117,53 +180,60 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
     else:
         subiendo = None
 
-    if rsi is not None:
-        if rsi < 30:
-            decision_key = "comprar"; color = "#00ff88"
-        elif rsi > 70:
-            decision_key = "vender"; color = "#ff4444"
-        else:
-            decision_key = "esperar"; color = "orange"
+    # Obtener datos 4H y calcular confluencias SMC
+    cierres, highs, lows = obtener_velas_4h(par["simbolo_cb"])
+
+    if len(cierres) > 15:
+        confluencias, detalles, rsi_4h, mm20, mm50, estructura, ob_low, ob_high = calcular_confluencias(precio, cierres, highs, lows)
+        decision_key, color, nivel_confluencia = determinar_senal(precio, confluencias, detalles, estructura)
     else:
-        if precio < par["comprar"]:
-            decision_key = "comprar"; color = "#00ff88"
-        elif precio > par["vender"]:
-            decision_key = "vender"; color = "#ff4444"
-        else:
-            decision_key = "esperar"; color = "orange"
+        confluencias, detalles, rsi_4h, mm20, mm50 = 0, [], None, None, None
+        estructura = "Indeterminado"
+        ob_low, ob_high = None, None
+        decision_key = "esperar"; color = "orange"
+        nivel_confluencia = "⚪ Sin datos"
 
     if lang == "es":
         tendencia_txt = "SUBIENDO ↗" if subiendo else "BAJANDO ↘" if subiendo is not None else "ESTABLE →"
         decisiones = {"comprar": "COMPRAR", "vender": "VENDER", "esperar": "ESPERAR"}
         btn_lang = "🇧🇷 Português"; btn_url = f"/?lang=pt&cripto={cripto}"
-        label_analisis = "🤖 Análisis IA"
+        label_analisis = "🤖 Análisis SMC con IA"
         label_actualizado = "Actualizado"
         label_cada = "Se actualiza cada 30 seg"
         label_precio = "Precio actual"
-        label_rsi = "RSI"
-        label_mm = "Media Móvil 7"
-        label_indicadores = "Indicadores Técnicos"
-        rsi_zona = "Sobrevendido 🟢" if rsi and rsi < 30 else "Sobrecomprado 🔴" if rsi and rsi > 70 else "Neutral 🟡"
+        label_indicadores = "Indicadores SMC 4H"
+        label_confluencias = "Confluencias"
+        label_estructura = "Estructura"
+        label_ob = "Order Block"
+        label_mm20 = "MM20"
+        label_mm50 = "MM50"
     else:
         tendencia_txt = "SUBINDO ↗" if subiendo else "CAINDO ↘" if subiendo is not None else "ESTÁVEL →"
         decisiones = {"comprar": "COMPRAR", "vender": "VENDER", "esperar": "AGUARDAR"}
         btn_lang = "🇪🇸 Español"; btn_url = f"/?lang=es&cripto={cripto}"
-        label_analisis = "🤖 Análise IA"
+        label_analisis = "🤖 Análise SMC com IA"
         label_actualizado = "Atualizado"
         label_cada = "Atualiza a cada 30 seg"
         label_precio = "Preço atual"
-        label_rsi = "RSI"
-        label_mm = "Média Móvel 7"
-        label_indicadores = "Indicadores Técnicos"
-        rsi_zona = "Sobrevendido 🟢" if rsi and rsi < 30 else "Sobrecomprado 🔴" if rsi and rsi > 70 else "Neutro 🟡"
+        label_indicadores = "Indicadores SMC 4H"
+        label_confluencias = "Confluências"
+        label_estructura = "Estrutura"
+        label_ob = "Order Block"
+        label_mm20 = "MM20"
+        label_mm50 = "MM50"
 
     decision = decisiones[decision_key]
     color_tendencia = "#00ff88" if subiendo else "#ff4444" if subiendo is not None else "orange"
-    analisis = analisis_ia(par["nombre"], precio, tendencia_txt, rsi, lang)
+    analisis = analisis_ia(par["nombre"], precio, estructura, confluencias, detalles, rsi_4h, lang)
+
     labels = [p["hora"] for p in historiales[cripto]]
     valores = lista
-    rsi_display = str(rsi) if rsi else "..."
+    rsi_display = str(rsi_4h) if rsi_4h else "..."
+    mm20_display = f"${mm20:,.2f}" if mm20 else "..."
+    mm50_display = f"${mm50:,.2f}" if mm50 else "..."
     mm7_display = f"${mm7:,.2f}" if mm7 else "..."
+    ob_display = f"${ob_low:,.2f} - ${ob_high:,.2f}" if ob_low and ob_high else "..."
+    confluencias_color = "#00ff88" if confluencias >= 3 else "orange" if confluencias == 2 else "#aaa"
 
     html = f"""
     <html>
@@ -187,35 +257,31 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
             .precio {{ font-size: 48px; font-weight: bold; margin: 8px 0; }}
             .tendencia {{ font-size: 18px; color: {color_tendencia}; font-weight: bold; }}
             .decision {{ font-size: 32px; font-weight: bold; color: {color}; margin-top: 8px; padding: 8px 20px; border: 2px solid {color}; border-radius: 30px; display: inline-block; }}
-            .indicadores {{ display: flex; gap: 10px; margin-bottom: 15px; }}
-            .ind-card {{ flex: 1; background: #16213e; border-radius: 12px; padding: 15px; text-align: center; border: 1px solid #ffffff11; }}
-            .ind-titulo {{ font-size: 11px; color: #aaa; text-transform: uppercase; margin-bottom: 6px; }}
-            .ind-valor {{ font-size: 22px; font-weight: bold; color: #f0a500; }}
-            .ind-zona {{ font-size: 12px; color: #aaa; margin-top: 4px; }}
+            .nivel {{ font-size: 13px; color: {confluencias_color}; margin-top: 8px; font-weight: bold; }}
+            .smc-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }}
+            .smc-card {{ background: #16213e; border-radius: 12px; padding: 12px; text-align: center; border: 1px solid #ffffff11; }}
+            .smc-titulo {{ font-size: 10px; color: #aaa; text-transform: uppercase; margin-bottom: 5px; }}
+            .smc-valor {{ font-size: 15px; font-weight: bold; color: #f0a500; }}
+            .confluencias-card {{ background: #16213e; border-radius: 12px; padding: 15px; margin-bottom: 15px; border: 2px solid {confluencias_color}; }}
+            .conf-titulo {{ font-size: 12px; color: #aaa; text-transform: uppercase; margin-bottom: 8px; }}
+            .conf-num {{ font-size: 36px; font-weight: bold; color: {confluencias_color}; display: inline-block; margin-right: 10px; }}
+            .conf-detalle {{ font-size: 13px; color: #ddd; margin-top: 5px; }}
             .grafico-card {{ background: #16213e; border-radius: 16px; padding: 20px; margin-bottom: 15px; border: 1px solid #ffffff11; }}
             .analisis-card {{ background: #16213e; border-left: 4px solid #f0a500; border-radius: 0 16px 16px 0; padding: 15px 20px; margin-bottom: 15px; }}
             .analisis-titulo {{ color: #f0a500; font-weight: bold; font-size: 14px; margin-bottom: 8px; }}
             .analisis-texto {{ font-size: 15px; line-height: 1.6; color: #ddd; }}
             .footer {{ text-align: center; color: #555; font-size: 12px; padding: 10px; }}
-            .ind-label {{ font-size: 11px; color: #aaa; text-transform: uppercase; margin-bottom: 8px; text-align: center; }}
             .tab-btn {{ padding: 8px 16px; border-radius: 20px; text-decoration: none; font-weight: bold; font-size: 14px; border: 1px solid #f0a500; }}
             .tab-active {{ background: #f0a500; color: #0d0d1a; }}
             .tab-inactive {{ background: #16213e; color: #f0a500; }}
+            .ind-label {{ font-size: 11px; color: #aaa; text-transform: uppercase; margin-bottom: 8px; text-align: center; }}
         </style>
-        <!-- Google Analytics -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-2BEW66V56L"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){{dataLayer.push(arguments);}}
-  gtag('js', new Date());
-  gtag('config', 'G-2BEW66V56L');
-</script>
     </head>
     <body>
         <div class="header">
             <a href="{btn_url}" class="lang-btn">{btn_lang}</a>
             <div class="logo">Bit<span>Mind</span></div>
-            <div class="tagline">AI-Powered Crypto Trading Signal</div>
+            <div class="tagline">AI-Powered SMC Crypto Trading Signal</div>
         </div>
 
         <div class="tabs">
@@ -226,8 +292,8 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
             <a href="/?lang={lang}&cripto=XRP" class="tab-btn {'tab-active' if cripto=='XRP' else 'tab-inactive'}">XRP</a>
             <a href="/resumen?lang={lang}" class="tab-btn tab-inactive">📊</a>
             <a href="/about?lang={lang}" class="tab-btn tab-inactive">ℹ️</a>
-        <a href="/precios?lang={lang}" class="tab-btn tab-inactive">💎 Planos</a>
         </div>
+
         <div class="container">
             <div class="precio-card">
                 <div class="label-precio">{label_precio} — {par["nombre"]}</div>
@@ -236,19 +302,34 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
                 <div style="margin-top:12px">
                     <span class="decision">{decision}</span>
                 </div>
+                <div class="nivel">{nivel_confluencia}</div>
             </div>
 
             <div class="ind-label">{label_indicadores}</div>
-            <div class="indicadores">
-                <div class="ind-card">
-                    <div class="ind-titulo">{label_rsi}</div>
-                    <div class="ind-valor">{rsi_display}</div>
-                    <div class="ind-zona">{rsi_zona}</div>
+
+            <div class="confluencias-card">
+                <div class="conf-titulo">{label_confluencias} SMC</div>
+                <span class="conf-num">{confluencias}/4</span>
+                <span style="font-size:13px;color:#aaa;">{estructura}</span>
+                {''.join([f'<div class="conf-detalle">✅ {d}</div>' for d in detalles]) if detalles else '<div class="conf-detalle" style="color:#555;">Sin confluencias detectadas aún</div>'}
+            </div>
+
+            <div class="smc-grid">
+                <div class="smc-card">
+                    <div class="smc-titulo">RSI 4H</div>
+                    <div class="smc-valor">{rsi_display}</div>
                 </div>
-                <div class="ind-card">
-                    <div class="ind-titulo">{label_mm}</div>
-                    <div class="ind-valor" style="font-size:16px">{mm7_display}</div>
-                    <div class="ind-zona">{'↗' if mm7 and precio > mm7 else '↘' if mm7 else '...'}</div>
+                <div class="smc-card">
+                    <div class="smc-titulo">{label_ob}</div>
+                    <div class="smc-valor" style="font-size:12px">{ob_display}</div>
+                </div>
+                <div class="smc-card">
+                    <div class="smc-titulo">{label_mm20}</div>
+                    <div class="smc-valor" style="font-size:13px">{mm20_display}</div>
+                </div>
+                <div class="smc-card">
+                    <div class="smc-titulo">{label_mm50}</div>
+                    <div class="smc-valor" style="font-size:13px">{mm50_display}</div>
                 </div>
             </div>
 
@@ -262,7 +343,7 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
             </div>
 
             <div style="text-align:center; margin-bottom:15px;">
-                <a href="https://wa.me/?text=🤖 BitMind - Crypto Trading con IA%0A💰 {par['nombre']}: ${precio:,.2f}%0A📊 Señal: {decision}%0A👉 https://bot-traiding-btc.onrender.com"
+                <a href="https://wa.me/?text=🤖 BitMind SMC - Crypto Trading con IA%0A💰 {par['nombre']}: ${precio:,.2f}%0A📊 Señal: {decision} ({confluencias}/4 confluencias)%0A👉 https://bitmind.app.br"
                    target="_blank"
                    style="background:#25D366;color:white;padding:12px 25px;border-radius:30px;text-decoration:none;font-size:16px;font-weight:bold;">
                     📲 Compartir en WhatsApp
@@ -323,21 +404,22 @@ def resumen(lang: str = Query("es")):
                 subiendo = diff > 0
             else:
                 subiendo = None
-            lista = [p["precio"] for p in hist]
-            rsi = calcular_rsi(lista)
-            if rsi is not None:
-                if rsi < 30: decision = "COMPRAR"; color = "#00ff88"
-                elif rsi > 70: decision = "VENDER"; color = "#ff4444"
-                else: decision = "ESPERAR"; color = "orange"
+
+            cierres, highs, lows = obtener_velas_4h(par["simbolo_cb"])
+            if len(cierres) > 15:
+                confluencias, detalles, rsi_4h, mm20, mm50, estructura, ob_low, ob_high = calcular_confluencias(precio, cierres, highs, lows)
+                decision_key, color, nivel = determinar_senal(precio, confluencias, detalles, estructura)
             else:
-                if precio < par["comprar"]: decision = "COMPRAR"; color = "#00ff88"
-                elif precio > par["vender"]: decision = "VENDER"; color = "#ff4444"
-                else: decision = "ESPERAR"; color = "orange"
-            if lang == "pt" and decision == "ESPERAR":
-                decision = "AGUARDAR"
+                confluencias = 0; color = "orange"
+                decision_key = "esperar"
+
+            decisiones_es = {"comprar": "COMPRAR", "vender": "VENDER", "esperar": "ESPERAR"}
+            decisiones_pt = {"comprar": "COMPRAR", "vender": "VENDER", "esperar": "AGUARDAR"}
+            decision = decisiones_pt[decision_key] if lang == "pt" else decisiones_es[decision_key]
+
             tend = "↗" if subiendo else "↘" if subiendo is not None else "→"
             tend_color = "#00ff88" if subiendo else "#ff4444" if subiendo is not None else "orange"
-            datos.append({"cripto": cripto, "nombre": par["nombre"], "precio": precio, "tend": tend, "tend_color": tend_color, "decision": decision, "color": color})
+            datos.append({"cripto": cripto, "nombre": par["nombre"], "precio": precio, "tend": tend, "tend_color": tend_color, "decision": decision, "color": color, "confluencias": confluencias})
         except:
             pass
 
@@ -347,9 +429,9 @@ def resumen(lang: str = Query("es")):
         <a href="/?lang={lang}&cripto={d['cripto']}" style="text-decoration:none;">
             <div style="background:#16213e;border-radius:12px;padding:15px 20px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;border:1px solid #ffffff11;">
                 <div style="font-size:20px;font-weight:bold;color:#f0a500;width:50px;">{d['cripto']}</div>
-                <div style="font-size:18px;font-weight:bold;color:white;">${d['precio']:,.2f}</div>
-                <div style="font-size:18px;color:{d['tend_color']};font-weight:bold;">{d['tend']}</div>
-                <div style="font-size:16px;font-weight:bold;color:{d['color']};border:1px solid {d['color']};padding:4px 12px;border-radius:20px;">{d['decision']}</div>
+                <div style="font-size:16px;font-weight:bold;color:white;">${d['precio']:,.2f}</div>
+                <div style="font-size:13px;color:#aaa;">{d['confluencias']}/4 ⚡</div>
+                <div style="font-size:14px;font-weight:bold;color:{d['color']};border:1px solid {d['color']};padding:4px 10px;border-radius:20px;">{d['decision']}</div>
             </div>
         </a>
         """
@@ -408,18 +490,18 @@ def about(lang: str = Query("es")):
         contenido = """
         <div class="seccion">
             <h2>🤖 ¿Qué es BitMind?</h2>
-            <p>BitMind es una plataforma de señales de trading con Inteligencia Artificial que analiza el mercado de criptomonedas en tiempo real, combinando análisis técnico y machine learning para darte ventaja en tus decisiones.</p>
+            <p>BitMind es una plataforma de señales de trading con Inteligencia Artificial que analiza el mercado de criptomonedas en tiempo real, combinando Smart Money Concepts (SMC) y machine learning para darte ventaja en tus decisiones.</p>
         </div>
         <div class="seccion">
             <h2>📈 La Tendencia — El Rey del Trading</h2>
             <p>Los traders profesionales dicen: <em>"La tendencia es tu amiga"</em>. El 80% de las ganancias en trading vienen de operar a favor de la tendencia, nunca contra ella.</p>
             <div class="card-tend alcista">
                 <div class="tend-titulo">📈 Tendencia Alcista — SUBIENDO</div>
-                <p>El precio hace máximos y mínimos cada vez más altos. Es el mejor momento para comprar y mantener posición. El mercado tiene fuerza compradora.</p>
+                <p>El precio hace máximos y mínimos cada vez más altos. Es el mejor momento para comprar y mantener posición.</p>
             </div>
             <div class="card-tend bajista">
                 <div class="tend-titulo">📉 Tendencia Bajista — BAJANDO</div>
-                <p>El precio hace máximos y mínimos cada vez más bajos. Momento de vender o mantenerse fuera del mercado. Los vendedores tienen el control.</p>
+                <p>El precio hace máximos y mínimos cada vez más bajos. Momento de vender o mantenerse fuera del mercado.</p>
             </div>
             <div class="card-tend lateral">
                 <div class="tend-titulo">➡️ Tendencia Lateral — ESTABLE</div>
@@ -427,30 +509,30 @@ def about(lang: str = Query("es")):
             </div>
         </div>
         <div class="seccion">
-            <h2>📊 Indicadores que usamos</h2>
+            <h2>📊 Smart Money Concepts (SMC)</h2>
             <div class="indicador">
-                <div class="ind-nombre">RSI — Índice de Fuerza Relativa</div>
-                <p>Mide si el mercado está sobrecomprado o sobrevendido.</p>
+                <div class="ind-nombre">BOS — Break of Structure</div>
+                <p>Ruptura de estructura que confirma la dirección del mercado. El precio rompe un máximo o mínimo previo, indicando la tendencia dominante.</p>
+            </div>
+            <div class="indicador">
+                <div class="ind-nombre">Order Blocks (OB)</div>
+                <p>Zonas donde los institucionales (bancos, fondos) acumularon posiciones. Son las áreas de mayor probabilidad de rebote del precio.</p>
+            </div>
+            <div class="indicador">
+                <div class="ind-nombre">⚡ Sistema de Confluencias</div>
+                <p>BitMind analiza 4 factores simultáneamente. Cuantas más confluencias, más fuerte es la señal:</p>
                 <div class="ind-reglas">
-                    <span class="regla compra">RSI &lt; 30 → Sobrevendido → Oportunidad de COMPRA</span>
-                    <span class="regla venta">RSI &gt; 70 → Sobrecomprado → Señal de VENTA</span>
-                    <span class="regla neutral">RSI 30-70 → Zona Neutral → ESPERAR</span>
+                    <span class="regla compra">3-4 confluencias → SEÑAL FUERTE 🟢</span>
+                    <span class="regla neutral">2 confluencias → SEÑAL MEDIA 🟡</span>
+                    <span class="regla venta">0-1 confluencias → ESPERAR ⚪</span>
                 </div>
-            </div>
-            <div class="indicador">
-                <div class="ind-nombre">Media Móvil de 7 períodos</div>
-                <p>Suaviza las fluctuaciones del precio para identificar la tendencia real. Si el precio está por encima de la media móvil, la tendencia es alcista. Si está por debajo, es bajista.</p>
-            </div>
-            <div class="indicador">
-                <div class="ind-nombre">🧠 IA + Tendencia</div>
-                <p>Nuestra IA combina la dirección del precio con el RSI y la Media Móvil para confirmar si la tendencia es real o una trampa del mercado, generando un análisis claro en segundos.</p>
             </div>
         </div>
         <div class="seccion">
             <h2>🚦 ¿Qué significan las señales?</h2>
-            <div class="senal compra-card">🟢 COMPRAR — Precio en zona de valor, buena oportunidad de entrada</div>
-            <div class="senal venta-card">🔴 VENDER — Precio sobrevaluado, momento de tomar ganancias</div>
-            <div class="senal espera-card">🟡 ESPERAR — Mercado indeciso, aguardar confirmación</div>
+            <div class="senal compra-card">🟢 COMPRAR — Alta confluencia alcista confirmada</div>
+            <div class="senal venta-card">🔴 VENDER — Alta confluencia bajista confirmada</div>
+            <div class="senal espera-card">🟡 ESPERAR — Confluencia insuficiente, aguardar</div>
         </div>
         <div class="seccion aviso">
             <h2>⚠️ Aviso Legal</h2>
@@ -462,18 +544,18 @@ def about(lang: str = Query("es")):
         contenido = """
         <div class="seccion">
             <h2>🤖 O que é BitMind?</h2>
-            <p>BitMind é uma plataforma de sinais de trading com Inteligência Artificial que analisa o mercado de criptomoedas em tempo real, combinando análise técnica e machine learning para te dar vantagem nas suas decisões.</p>
+            <p>BitMind é uma plataforma de sinais de trading com Inteligência Artificial que analisa o mercado de criptomoedas em tempo real, combinando Smart Money Concepts (SMC) e machine learning para te dar vantagem nas suas decisões.</p>
         </div>
         <div class="seccion">
             <h2>📈 A Tendência — O Rei do Trading</h2>
             <p>Os traders profissionais dizem: <em>"A tendência é sua amiga"</em>. 80% dos lucros no trading vêm de operar a favor da tendência, nunca contra ela.</p>
             <div class="card-tend alcista">
                 <div class="tend-titulo">📈 Tendência de Alta — SUBINDO</div>
-                <p>O preço faz máximas e mínimas cada vez mais altas. É o melhor momento para comprar e manter posição. O mercado tem força compradora.</p>
+                <p>O preço faz máximas e mínimas cada vez mais altas. É o melhor momento para comprar e manter posição.</p>
             </div>
             <div class="card-tend bajista">
                 <div class="tend-titulo">📉 Tendência de Baixa — CAINDO</div>
-                <p>O preço faz máximas e mínimas cada vez mais baixas. Momento de vender ou ficar fora do mercado. Os vendedores estão no controle.</p>
+                <p>O preço faz máximas e mínimas cada vez mais baixas. Momento de vender ou ficar fora do mercado.</p>
             </div>
             <div class="card-tend lateral">
                 <div class="tend-titulo">➡️ Tendência Lateral — ESTÁVEL</div>
@@ -481,30 +563,30 @@ def about(lang: str = Query("es")):
             </div>
         </div>
         <div class="seccion">
-            <h2>📊 Indicadores que usamos</h2>
+            <h2>📊 Smart Money Concepts (SMC)</h2>
             <div class="indicador">
-                <div class="ind-nombre">RSI — Índice de Força Relativa</div>
-                <p>Mede se o mercado está sobrecomprado ou sobrevendido.</p>
+                <div class="ind-nombre">BOS — Break of Structure</div>
+                <p>Ruptura de estrutura que confirma a direção do mercado. O preço rompe uma máxima ou mínima anterior, indicando a tendência dominante.</p>
+            </div>
+            <div class="indicador">
+                <div class="ind-nombre">Order Blocks (OB)</div>
+                <p>Zonas onde os institucionais (bancos, fundos) acumularam posições. São as áreas de maior probabilidade de rebote do preço.</p>
+            </div>
+            <div class="indicador">
+                <div class="ind-nombre">⚡ Sistema de Confluências</div>
+                <p>BitMind analisa 4 fatores simultaneamente. Quanto mais confluências, mais forte é o sinal:</p>
                 <div class="ind-reglas">
-                    <span class="regla compra">RSI &lt; 30 → Sobrevendido → Oportunidade de COMPRA</span>
-                    <span class="regla venta">RSI &gt; 70 → Sobrecomprado → Sinal de VENDA</span>
-                    <span class="regla neutral">RSI 30-70 → Zona Neutra → AGUARDAR</span>
+                    <span class="regla compra">3-4 confluências → SINAL FORTE 🟢</span>
+                    <span class="regla neutral">2 confluências → SINAL MÉDIO 🟡</span>
+                    <span class="regla venta">0-1 confluências → AGUARDAR ⚪</span>
                 </div>
-            </div>
-            <div class="indicador">
-                <div class="ind-nombre">Média Móvel de 7 períodos</div>
-                <p>Suaviza as flutuações do preço para identificar a tendência real. Se o preço está acima da média móvel, a tendência é de alta. Se está abaixo, é de baixa.</p>
-            </div>
-            <div class="indicador">
-                <div class="ind-nombre">🧠 IA + Tendência</div>
-                <p>Nossa IA combina a direção do preço com o RSI e a Média Móvel para confirmar se a tendência é real ou uma armadilha do mercado, gerando uma análise clara em segundos.</p>
             </div>
         </div>
         <div class="seccion">
             <h2>🚦 O que significam os sinais?</h2>
-            <div class="senal compra-card">🟢 COMPRAR — Preço em zona de valor, boa oportunidade de entrada</div>
-            <div class="senal venta-card">🔴 VENDER — Preço sobrevalorizado, momento de realizar lucros</div>
-            <div class="senal espera-card">🟡 AGUARDAR — Mercado indeciso, esperar confirmação</div>
+            <div class="senal compra-card">🟢 COMPRAR — Alta confluência alcista confirmada</div>
+            <div class="senal venta-card">🔴 VENDER — Alta confluência baixista confirmada</div>
+            <div class="senal espera-card">🟡 AGUARDAR — Confluência insuficiente, esperar</div>
         </div>
         <div class="seccion aviso">
             <h2>⚠️ Aviso Legal</h2>
@@ -602,189 +684,15 @@ def stats():
                 <div class="total-num">{visitas['total']}</div>
                 <div class="total-txt">Total de visitas</div>
             </div>
-            <div class="card">
-                <div class="card-nombre">₿ Bitcoin</div>
-                <div class="card-num">{visitas['BTC']}</div>
-            </div>
-            <div class="card">
-                <div class="card-nombre">Ξ Ethereum</div>
-                <div class="card-num">{visitas['ETH']}</div>
-            </div>
-            <div class="card">
-                <div class="card-nombre">◎ Solana</div>
-                <div class="card-num">{visitas['SOL']}</div>
-            </div>
-            <div class="card">
-                <div class="card-nombre">⬡ BNB</div>
-                <div class="card-num">{visitas['BNB']}</div>
-            </div>
-            <div class="card">
-                <div class="card-nombre">✕ XRP</div>
-                <div class="card-num">{visitas['XRP']}</div>
-            </div>
-            <div class="card">
-                <div class="card-nombre">📊 Resumen</div>
-                <div class="card-num">{visitas['resumen']}</div>
-            </div>
-            <div class="card">
-                <div class="card-nombre">ℹ️ About</div>
-                <div class="card-num">{visitas['about']}</div>
-            </div>
+            <div class="card"><div class="card-nombre">₿ Bitcoin</div><div class="card-num">{visitas['BTC']}</div></div>
+            <div class="card"><div class="card-nombre">Ξ Ethereum</div><div class="card-num">{visitas['ETH']}</div></div>
+            <div class="card"><div class="card-nombre">◎ Solana</div><div class="card-num">{visitas['SOL']}</div></div>
+            <div class="card"><div class="card-nombre">⬡ BNB</div><div class="card-num">{visitas['BNB']}</div></div>
+            <div class="card"><div class="card-nombre">✕ XRP</div><div class="card-num">{visitas['XRP']}</div></div>
+            <div class="card"><div class="card-nombre">📊 Resumen</div><div class="card-num">{visitas['resumen']}</div></div>
+            <div class="card"><div class="card-nombre">ℹ️ About</div><div class="card-num">{visitas['about']}</div></div>
             <div class="aviso">⚠️ Las visitas se reinician cuando el servidor duerme</div>
         </div>
     </body>
     </html>
     """
-@app.get("/precios", response_class=HTMLResponse)
-def precios():
-    return """
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BitMind - Planos</title>
-<style>
-body{background:#0d1117;color:#fff;font-family:Arial;margin:0;padding:20px;text-align:center}
-h1{color:#f7931a;font-size:2em}
-.planes{display:flex;justify-content:center;gap:20px;flex-wrap:wrap;margin-top:30px}
-.plan{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:30px;width:250px}
-.plan.pro{border-color:#f7931a}
-.plan h2{color:#f7931a;font-size:1.5em}
-.price{font-size:2.5em;font-weight:bold;margin:15px 0}
-.price span{font-size:0.4em;color:#aaa}
-ul{list-style:none;padding:0;text-align:left}
-li{padding:8px 0;border-bottom:1px solid #30363d}
-.btn{display:block;margin-top:20px;padding:12px;border-radius:8px;text-decoration:none;font-weight:bold}
-.btn-free{background:#30363d;color:#fff}
-.btn-pro{background:#f7931a;color:#000}
-.btn-trader{background:#fff;color:#000}
-.badge{background:#f7931a;color:#000;padding:3px 10px;border-radius:20px;font-size:0.7em}
-</style>
-</head>
-<body>
-<h1>🟠 BitMind</h1>
-<p>Escolha seu plano de análise cripto com IA</p>
-<div class="planes">
-<div class="plan">
-<h2>Free</h2>
-<div class="price">R$0<span>/mês</span></div>
-<ul>
-<li>✅ Preço BTC em tempo real</li>
-<li>✅ Sinal básico</li>
-<li>❌ Análise IA</li>
-<li>❌ Múltiplas moedas</li>
-<li>❌ Alertas</li>
-</ul>
-<a href="/" class="btn btn-free">Usar Grátis</a>
-</div>
-<div class="plan pro">
-<h2>Pro <span class="badge">POPULAR</span></h2>
-<div class="price">R$29<span>/mês</span></div>
-<ul>
-<li>✅ Tudo do Free</li>
-<li>✅ Análise IA completa</li>
-<li>✅ BTC, ETH, SOL, BNB, XRP</li>
-<li>✅ Alertas em tempo real</li>
-<li>✅ Histórico avançado</li>
-</ul>
-<a href="/pagar/mp/pro" class="btn btn-pro">Assinar com PIX</a>
-<a href="/pagar/stripe/pro" class="btn btn-free" style="margin-top:8px">Assinar com Cartão</a>
-</div>
-<div class="plan">
-<h2>Trader</h2>
-<div class="price">R$79<span>/mês</span></div>
-<ul>
-<li>✅ Tudo do Pro</li>
-<li>✅ Sinais avançados</li>
-<li>✅ Suporte prioritário</li>
-<li>✅ Relatórios diários</li>
-<li>✅ API access</li>
-</ul>
-<a href="/pagar/mp/trader" class="btn btn-trader">Assinar com PIX</a>
-<a href="/pagar/stripe/trader" class="btn btn-free" style="margin-top:8px">Assinar com Cartão</a>
-</div>
-</div>
-<br><a href="/" style="color:#f7931a">← Voltar ao Dashboard</a>
-</body>
-</html>
-"""
-@app.get("/login", response_class=HTMLResponse)
-def pagina_login():
-    return """
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BitMind - Login</title>
-<style>
-body{background:#0d1117;color:#fff;font-family:Arial;margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh}
-.box{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:40px;width:300px;text-align:center}
-h1{color:#f7931a}
-input{width:100%;padding:12px;margin:8px 0;border-radius:8px;border:1px solid #30363d;background:#0d1117;color:#fff;box-sizing:border-box}
-.btn{width:100%;padding:12px;border-radius:8px;border:none;font-weight:bold;cursor:pointer;margin-top:8px}
-.btn-login{background:#f7931a;color:#000}
-.btn-registro{background:#30363d;color:#fff}
-.tabs{display:flex;margin-bottom:20px}
-.tab{flex:1;padding:10px;cursor:pointer;border-bottom:2px solid #30363d}
-.tab.active{border-bottom:2px solid #f7931a;color:#f7931a}
-a{color:#f7931a}
-</style>
-</head>
-<body>
-<div class="box">
-<h1>🟠 BitMind</h1>
-<div class="tabs">
-<div class="tab active" onclick="showLogin()">Login</div>
-<div class="tab" onclick="showRegistro()">Registro</div>
-</div>
-<div id="login-form">
-<input type="email" id="email-l" placeholder="Email">
-<input type="password" id="senha-l" placeholder="Senha">
-<button class="btn btn-login" onclick="login()">Entrar</button>
-</div>
-<div id="registro-form" style="display:none">
-<input type="email" id="email-r" placeholder="Email">
-<input type="password" id="senha-r" placeholder="Senha (min 6 caracteres)">
-<button class="btn btn-login" onclick="registro()">Criar conta</button>
-</div>
-<br><a href="/">← Voltar</a>
-</div>
-<script>
-function showLogin(){
-  document.getElementById('login-form').style.display='block';
-  document.getElementById('registro-form').style.display='none';
-  document.querySelectorAll('.tab')[0].classList.add('active');
-  document.querySelectorAll('.tab')[1].classList.remove('active');
-}
-function showRegistro(){
-  document.getElementById('login-form').style.display='none';
-  document.getElementById('registro-form').style.display='block';
-  document.querySelectorAll('.tab')[0].classList.remove('active');
-  document.querySelectorAll('.tab')[1].classList.add('active');
-}
-async function login(){
-  const email=document.getElementById('email-l').value;
-  const senha=document.getElementById('senha-l').value;
-  const fd=new FormData();
-  fd.append('email',email);fd.append('password',senha);
-  const r=await fetch('/login',{method:'POST',body:fd});
-  const d=await r.json();
-  if(r.ok){window.location.href='/';}
-  else{alert(d.detail);}
-}
-async function registro(){
-  const email=document.getElementById('email-r').value;
-  const senha=document.getElementById('senha-r').value;
-  const fd=new FormData();
-  fd.append('email',email);fd.append('password',senha);
-  const r=await fetch('/registro',{method:'POST',body:fd});
-  const d=await r.json();
-  if(r.ok){alert('Conta criada! Faça login.');showLogin();}
-  else{alert(d.detail);}
-}
-</script>
-</body>
-</html>
-"""
