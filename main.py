@@ -25,7 +25,7 @@ def obtener_precio(simbolo):
 
 def obtener_velas_4h(simbolo):
     try:
-        url = f"https://api.exchange.coinbase.com/products/{simbolo}/candles?granularity=14400&limit=50"
+        url = f"https://api.exchange.coinbase.com/products/{simbolo}/candles?granularity=21600&limit=50"
         respuesta = requests.get(url)
         velas = respuesta.json()
         # Formato: [time, low, high, open, close, volume]
