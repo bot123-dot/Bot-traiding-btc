@@ -699,3 +699,10 @@ def stats():
     </body>
     </html>
     """
+
+@app.get("/test_telegram")
+def test_telegram():
+    enviar_telegram("BTC", 65713.12, "VENDER", 3, 
+        ["RSI sobrecomprado (71.0)", "Precio sobre MM20 y MM50", "Precio en OB $65,607-$66,424"], 
+        "Lateral")
+    return {"status": "Mensaje enviado!"}
