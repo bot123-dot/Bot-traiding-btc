@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse
 import requests
+import os
 from anthropic import Anthropic
 from datetime import datetime, timezone, timedelta
 
