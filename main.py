@@ -224,6 +224,8 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
         label_mm50 = "MM50"
 
     decision = decisiones[decision_key]
+    if confluencias >= 3:
+        enviar_telegram(cripto, precio, decision, confluencias, detalles, estructura)
     color_tendencia = "#00ff88" if subiendo else "#ff4444" if subiendo is not None else "orange"
     analisis = analisis_ia(par["nombre"], precio, estructura, confluencias, detalles, rsi_4h, lang)
 
