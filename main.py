@@ -720,22 +720,14 @@ async def test_telegram():
             precio = obtener_precio(simbolo)
             cierres, highs, lows = obtener_velas_6h(simbolo)
             if len(cierres) >= 20:
-                confluencias, detalles, rsi, mm20, mm50 = calcular_confluencias(
-                    cierres, highs, lows, precio
-                )
-                decision, color, estructura = determinar_senal(
-                    precio, confluencias, detalles, cierres
-                )
-                enviar_telegram(
-                    cripto, precio, decision,
-                    confluencias, estructura, detalles
-                )
-        return {"status": "ok", "mensaje": "Señales enviadas a Telegram"}
+                confluencias, detalles, rsi, mm20, mm50 = calcular_confluencias(cierres, highs, lows, precio)
+                decision, color, estructura = determinar_senal(precio, confluencias, detalles, cierres)
+                enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles)
+        return {"status": "ok", "mensaje": "Señales enviadas"}
     except Exception as e:
         return {"status": "error", "detalle": str(e)}
-# ============ SCHEDULER AUTOMÁTICO ============
+
 import asyncio
-import threading
 
 async def loop_analisis():
     while True:
@@ -745,20 +737,13 @@ async def loop_analisis():
                 precio = obtener_precio(simbolo)
                 cierres, highs, lows = obtener_velas_6h(simbolo)
                 if len(cierres) >= 20:
-                    confluencias, detalles, rsi, mm20, mm50 = calcular_confluencias(
-                        cierres, highs, lows, precio
-                    )
-                    decision, color, estructura = determinar_senal(
-                        precio, confluencias, detalles, cierres
-                    )
+                    confluencias, detalles, rsi, mm20, mm50 = calcular_confluencias(cierres, highs, lows, precio)
+                    decision, color, estructura = determinar_senal(precio, confluencias, detalles, cierres)
                     if confluencias >= 3:
-                        enviar_telegram(
-                            cripto, precio, decision,
-                            confluencias, estructura, detalles
-                        )
+                        enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles)
         except Exception as e:
             print(f"Error en loop: {e}")
-        await asyncio.sleep(21600)  # cada 6 horas
+        await asyncio.sleep(21600)
 
 @app.on_event("startup")
 async def iniciar_scheduler():
