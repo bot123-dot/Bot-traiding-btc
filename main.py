@@ -1,8 +1,8 @@
 from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse
 import requests
-import os
 from anthropic import Anthropic
+import os
 from datetime import datetime, timezone, timedelta
 
 app = FastAPI()
@@ -10,7 +10,6 @@ client = Anthropic()
 
 historiales = {"BTC": [], "ETH": [], "SOL": [], "BNB": [], "XRP": []}
 visitas = {"total": 0, "BTC": 0, "ETH": 0, "SOL": 0, "BNB": 0, "XRP": 0, "resumen": 0, "about": 0}
-ultima_senal_enviada = {"cripto": "", "decision": ""}
 
 PARES = {
     "BTC": {"nombre": "Bitcoin", "simbolo": "BTC-USD", "simbolo_cb": "BTC-USD"},
@@ -25,17 +24,16 @@ def obtener_precio(simbolo):
     respuesta = requests.get(url)
     return float(respuesta.json()["data"]["amount"])
 
-def obtener_velas_6h(simbolo):
+def obtener_velas_4h(simbolo):
     try:
         url = f"https://api.exchange.coinbase.com/products/{simbolo}/candles?granularity=21600&limit=50"
         respuesta = requests.get(url)
         velas = respuesta.json()
-        if isinstance(velas, list) and len(velas) > 0:
-            cierres = [v[4] for v in reversed(velas)]
-            highs = [v[2] for v in reversed(velas)]
-            lows = [v[1] for v in reversed(velas)]
-            return cierres, highs, lows
-        return [], [], []
+        # Formato: [time, low, high, open, close, volume]
+        cierres = [v[4] for v in reversed(velas)]
+        highs = [v[2] for v in reversed(velas)]
+        lows = [v[1] for v in reversed(velas)]
+        return cierres, highs, lows
     except:
         return [], [], []
 
@@ -77,18 +75,22 @@ def detectar_order_block(cierres, highs, lows):
         return None, None
     for i in range(len(cierres)-2, max(len(cierres)-10, 0), -1):
         if cierres[i] < cierres[i-1] and cierres[i+1] > cierres[i]:
-            return round(lows[i], 2), round(highs[i], 2)
+            ob_high = highs[i]
+            ob_low = lows[i]
+            return round(ob_low, 2), round(ob_high, 2)
     return None, None
 
 def calcular_confluencias(precio, cierres, highs, lows):
     confluencias = 0
     detalles = []
+
     rsi_4h = calcular_rsi(cierres)
     mm20 = calcular_mm(cierres, 20)
     mm50 = calcular_mm(cierres, 50)
     estructura = detectar_bos(highs, lows)
     ob_low, ob_high = detectar_order_block(cierres, highs, lows)
 
+    # Confluencia 1: RSI
     if rsi_4h and rsi_4h < 35:
         confluencias += 1
         detalles.append(f"RSI sobrevendido ({rsi_4h})")
@@ -96,6 +98,7 @@ def calcular_confluencias(precio, cierres, highs, lows):
         confluencias += 1
         detalles.append(f"RSI sobrecomprado ({rsi_4h})")
 
+    # Confluencia 2: Estructura
     if "Alcista" in estructura:
         confluencias += 1
         detalles.append("BOS alcista confirmado")
@@ -103,6 +106,7 @@ def calcular_confluencias(precio, cierres, highs, lows):
         confluencias += 1
         detalles.append("BOS bajista confirmado")
 
+    # Confluencia 3: Media Móvil
     if mm20 and mm50:
         if mm20 > mm50 and precio > mm20:
             confluencias += 1
@@ -111,10 +115,11 @@ def calcular_confluencias(precio, cierres, highs, lows):
             confluencias += 1
             detalles.append("Precio bajo MM20 y MM50")
 
+    # Confluencia 4: Order Block
     if ob_low and ob_high:
         if ob_low <= precio <= ob_high:
             confluencias += 1
-            detalles.append(f"Precio en OB ${ob_low:,.2f}-${ob_high:,.2f}")
+            detalles.append(f"Precio en OB ${ob_low}-${ob_high}")
 
     return confluencias, detalles, rsi_4h, mm20, mm50, estructura, ob_low, ob_high
 
@@ -128,38 +133,6 @@ def determinar_senal(precio, confluencias, detalles, estructura):
         return "esperar", "orange", "🟡 CONFLUENCIA MEDIA"
     return "esperar", "orange", "⚪ BAJA CONFLUENCIA"
 
-def enviar_telegram(cripto, precio, decision, confluencias, detalles, estructura):
-    global ultima_senal_enviada
-    try:
-        token = os.getenv("TELEGRAM_BOT_TOKEN")
-        channel = os.getenv("TELEGRAM_CHANNEL_ID")
-        if not token or not channel:
-            return
-        if ultima_senal_enviada["cripto"] == cripto and ultima_senal_enviada["decision"] == decision:
-            return
-        emoji = "🟢" if decision == "COMPRAR" else "🔴" if decision == "VENDER" else "🟡"
-        detalles_txt = "\n".join([f"✅ {d}" for d in detalles])
-        mensaje = f"""🤖 *BitMind Signal*
-
-{emoji} *{decision}* — {cripto}/USD
-💰 Precio: ${precio:,.2f}
-⚡ {confluencias}/4 Confluencias SMC
-📊 Estructura: {estructura}
-
-{detalles_txt}
-
-👉 [Ver análisis completo](https://bitmind.app.br)"""
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        requests.post(url, json={
-            "chat_id": channel,
-            "text": mensaje,
-            "parse_mode": "Markdown",
-            "disable_web_page_preview": False
-        })
-        ultima_senal_enviada = {"cripto": cripto, "decision": decision}
-    except Exception as e:
-        print(f"Error Telegram: {e}")
-
 def analisis_ia(cripto, precio, estructura, confluencias, detalles, rsi, idioma):
     lang = "español latinoamericano" if idioma == "es" else "português brasileiro"
     detalles_txt = ", ".join(detalles) if detalles else "sin confluencias claras"
@@ -169,7 +142,7 @@ def analisis_ia(cripto, precio, estructura, confluencias, detalles, rsi, idioma)
         system=f"Eres un trader profesional especialista en Smart Money Concepts (SMC). Responde en {lang}. NUNCA uses markdown, asteriscos, almohadillas ni títulos. Solo texto plano y directo.",
         messages=[{
             "role": "user",
-            "content": f"{cripto} está en ${precio:,.2f} USD. Estructura: {estructura}. Confluencias SMC ({confluencias}): {detalles_txt}. RSI: {rsi}. Dame un análisis SMC en 3 frases máximo."
+            "content": f"{cripto} está en ${precio:,.2f} USD. Estructura: {estructura}. Confluencias SMC detectadas ({confluencias}): {detalles_txt}. RSI 4H: {rsi}. Dame un análisis SMC en 3 frases máximo."
         }]
     )
     return mensaje.content[0].text
@@ -181,13 +154,6 @@ def calcular_mm_simple(precios, periodo=7):
     if len(precios) < periodo:
         return None
     return round(sum(precios[-periodo:]) / periodo, 2)
-
-@app.get("/test_telegram")
-def test_telegram():
-    enviar_telegram("BTC", 65713.12, "VENDER", 3,
-        ["RSI sobrecomprado (71.0)", "Precio sobre MM20 y MM50", "Precio en OB $65,607-$66,424"],
-        "Lateral")
-    return {"status": "Mensaje enviado al canal!"}
 
 @app.get("/", response_class=HTMLResponse)
 def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
@@ -215,7 +181,8 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
     else:
         subiendo = None
 
-    cierres, highs, lows = obtener_velas_6h(par["simbolo_cb"])
+    # Obtener datos 4H y calcular confluencias SMC
+    cierres, highs, lows = obtener_velas_4h(par["simbolo_cb"])
 
     if len(cierres) > 15:
         confluencias, detalles, rsi_4h, mm20, mm50, estructura, ob_low, ob_high = calcular_confluencias(precio, cierres, highs, lows)
@@ -227,9 +194,6 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
         decision_key = "esperar"; color = "orange"
         nivel_confluencia = "⚪ Sin datos"
 
-    if confluencias >= 3:
-        enviar_telegram(par["nombre"], precio, decision_key.upper(), confluencias, detalles, estructura)
-
     if lang == "es":
         tendencia_txt = "SUBIENDO ↗" if subiendo else "BAJANDO ↘" if subiendo is not None else "ESTABLE →"
         decisiones = {"comprar": "COMPRAR", "vender": "VENDER", "esperar": "ESPERAR"}
@@ -238,13 +202,12 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
         label_actualizado = "Actualizado"
         label_cada = "Se actualiza cada 30 seg"
         label_precio = "Precio actual"
-        label_indicadores = "Indicadores SMC 6H"
+        label_indicadores = "Indicadores SMC 4H"
         label_confluencias = "Confluencias"
         label_estructura = "Estructura"
         label_ob = "Order Block"
         label_mm20 = "MM20"
         label_mm50 = "MM50"
-        rsi_zona = "Sobrevendido 🟢" if rsi_4h and rsi_4h < 35 else "Sobrecomprado 🔴" if rsi_4h and rsi_4h > 65 else "Neutral 🟡"
     else:
         tendencia_txt = "SUBINDO ↗" if subiendo else "CAINDO ↘" if subiendo is not None else "ESTÁVEL →"
         decisiones = {"comprar": "COMPRAR", "vender": "VENDER", "esperar": "AGUARDAR"}
@@ -253,23 +216,23 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
         label_actualizado = "Atualizado"
         label_cada = "Atualiza a cada 30 seg"
         label_precio = "Preço atual"
-        label_indicadores = "Indicadores SMC 6H"
+        label_indicadores = "Indicadores SMC 4H"
         label_confluencias = "Confluências"
-        label_estrutura = "Estrutura"
+        label_estructura = "Estrutura"
         label_ob = "Order Block"
         label_mm20 = "MM20"
         label_mm50 = "MM50"
-        label_estrutura = "Estrutura"
-        rsi_zona = "Sobrevendido 🟢" if rsi_4h and rsi_4h < 35 else "Sobrecomprado 🔴" if rsi_4h and rsi_4h > 65 else "Neutro 🟡"
 
     decision = decisiones[decision_key]
     color_tendencia = "#00ff88" if subiendo else "#ff4444" if subiendo is not None else "orange"
     analisis = analisis_ia(par["nombre"], precio, estructura, confluencias, detalles, rsi_4h, lang)
+
     labels = [p["hora"] for p in historiales[cripto]]
     valores = lista
     rsi_display = str(rsi_4h) if rsi_4h else "..."
     mm20_display = f"${mm20:,.2f}" if mm20 else "..."
     mm50_display = f"${mm50:,.2f}" if mm50 else "..."
+    mm7_display = f"${mm7:,.2f}" if mm7 else "..."
     ob_display = f"${ob_low:,.2f} - ${ob_high:,.2f}" if ob_low and ob_high else "..."
     confluencias_color = "#00ff88" if confluencias >= 3 else "orange" if confluencias == 2 else "#aaa"
 
@@ -309,10 +272,10 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
             .analisis-titulo {{ color: #f0a500; font-weight: bold; font-size: 14px; margin-bottom: 8px; }}
             .analisis-texto {{ font-size: 15px; line-height: 1.6; color: #ddd; }}
             .footer {{ text-align: center; color: #555; font-size: 12px; padding: 10px; }}
-            .ind-label {{ font-size: 11px; color: #aaa; text-transform: uppercase; margin-bottom: 8px; text-align: center; }}
             .tab-btn {{ padding: 8px 16px; border-radius: 20px; text-decoration: none; font-weight: bold; font-size: 14px; border: 1px solid #f0a500; }}
             .tab-active {{ background: #f0a500; color: #0d0d1a; }}
             .tab-inactive {{ background: #16213e; color: #f0a500; }}
+            .ind-label {{ font-size: 11px; color: #aaa; text-transform: uppercase; margin-bottom: 8px; text-align: center; }}
         </style>
     </head>
     <body>
@@ -354,7 +317,7 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
 
             <div class="smc-grid">
                 <div class="smc-card">
-                    <div class="smc-titulo">RSI 6H</div>
+                    <div class="smc-titulo">RSI 4H</div>
                     <div class="smc-valor">{rsi_display}</div>
                 </div>
                 <div class="smc-card">
@@ -442,15 +405,19 @@ def resumen(lang: str = Query("es")):
                 subiendo = diff > 0
             else:
                 subiendo = None
-            cierres, highs, lows = obtener_velas_6h(par["simbolo_cb"])
+
+            cierres, highs, lows = obtener_velas_4h(par["simbolo_cb"])
             if len(cierres) > 15:
                 confluencias, detalles, rsi_4h, mm20, mm50, estructura, ob_low, ob_high = calcular_confluencias(precio, cierres, highs, lows)
                 decision_key, color, nivel = determinar_senal(precio, confluencias, detalles, estructura)
             else:
-                confluencias = 0; color = "orange"; decision_key = "esperar"
+                confluencias = 0; color = "orange"
+                decision_key = "esperar"
+
             decisiones_es = {"comprar": "COMPRAR", "vender": "VENDER", "esperar": "ESPERAR"}
             decisiones_pt = {"comprar": "COMPRAR", "vender": "VENDER", "esperar": "AGUARDAR"}
             decision = decisiones_pt[decision_key] if lang == "pt" else decisiones_es[decision_key]
+
             tend = "↗" if subiendo else "↘" if subiendo is not None else "→"
             tend_color = "#00ff88" if subiendo else "#ff4444" if subiendo is not None else "orange"
             datos.append({"cripto": cripto, "nombre": par["nombre"], "precio": precio, "tend": tend, "tend_color": tend_color, "decision": decision, "color": color, "confluencias": confluencias})
@@ -458,293 +425,4 @@ def resumen(lang: str = Query("es")):
             pass
 
     filas = ""
-    for d in datos:
-        filas += f"""
-        <a href="/?lang={lang}&cripto={d['cripto']}" style="text-decoration:none;">
-            <div style="background:#16213e;border-radius:12px;padding:15px 20px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;border:1px solid #ffffff11;">
-                <div style="font-size:20px;font-weight:bold;color:#f0a500;width:50px;">{d['cripto']}</div>
-                <div style="font-size:16px;font-weight:bold;color:white;">${d['precio']:,.2f}</div>
-                <div style="font-size:13px;color:#aaa;">{d['confluencias']}/4 ⚡</div>
-                <div style="font-size:14px;font-weight:bold;color:{d['color']};border:1px solid {d['color']};padding:4px 10px;border-radius:20px;">{d['decision']}</div>
-            </div>
-        </a>
-        """
-
-    titulo = "Resumen del Mercado" if lang == "es" else "Resumo do Mercado"
-    btn_lang = "🇧🇷 Português" if lang == "es" else "🇪🇸 Español"
-    btn_url = f"/resumen?lang={'pt' if lang == 'es' else 'es'}"
-    home_txt = "← Volver" if lang == "es" else "← Voltar"
-
-    return f"""
-    <html>
-    <head>
-        <title>BitMind — {titulo}</title>
-        <meta http-equiv="refresh" content="30;url=/resumen?lang={lang}">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-            * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-            body {{ font-family: Arial, sans-serif; background: #0d0d1a; color: white; min-height: 100vh; }}
-            .header {{ background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 20px; text-align: center; border-bottom: 2px solid #f0a500; position: relative; }}
-            .logo {{ font-size: 28px; font-weight: bold; color: #f0a500; letter-spacing: 2px; }}
-            .logo span {{ color: white; }}
-            .lang-btn {{ position: absolute; top: 20px; right: 15px; background: #16213e; border: 1px solid #f0a500; color: #f0a500; padding: 6px 12px; border-radius: 20px; text-decoration: none; font-size: 13px; }}
-            .container {{ max-width: 600px; margin: 0 auto; padding: 20px 15px; }}
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <a href="{btn_url}" class="lang-btn">{btn_lang}</a>
-            <div class="logo">Bit<span>Mind</span></div>
-            <div style="font-size:14px;color:#aaa;margin-top:4px;">{titulo}</div>
-        </div>
-        <div class="container">
-            <a href="/?lang={lang}" style="color:#f0a500;font-size:14px;display:block;margin-bottom:15px;">{home_txt}</a>
-            {filas}
-            <div style="text-align:center;color:#555;font-size:12px;padding:10px;">
-                Se actualiza cada 30 seg
-            </div>
-        </div>
-    </body>
-    </html>
-    """
-
-
-@app.get("/about", response_class=HTMLResponse)
-def about(lang: str = Query("es")):
-    global visitas
-    visitas["total"] += 1
-    visitas["about"] += 1
-
-    btn_lang = "🇧🇷 Português" if lang == "es" else "🇪🇸 Español"
-    btn_url = f"/about?lang={'pt' if lang == 'es' else 'es'}"
-    home_txt = "← Volver" if lang == "es" else "← Voltar"
-
-    if lang == "es":
-        titulo = "¿Qué es BitMind?"
-        contenido = """
-        <div class="seccion">
-            <h2>🤖 ¿Qué es BitMind?</h2>
-            <p>BitMind es una plataforma de señales de trading con Inteligencia Artificial que analiza el mercado de criptomonedas en tiempo real, combinando Smart Money Concepts (SMC) y machine learning para darte ventaja en tus decisiones.</p>
-        </div>
-        <div class="seccion">
-            <h2>📈 La Tendencia — El Rey del Trading</h2>
-            <p>Los traders profesionales dicen: <em>"La tendencia es tu amiga"</em>. El 80% de las ganancias en trading vienen de operar a favor de la tendencia, nunca contra ella.</p>
-            <div class="card-tend alcista">
-                <div class="tend-titulo">📈 Tendencia Alcista — SUBIENDO</div>
-                <p>El precio hace máximos y mínimos cada vez más altos. Es el mejor momento para comprar y mantener posición.</p>
-            </div>
-            <div class="card-tend bajista">
-                <div class="tend-titulo">📉 Tendencia Bajista — BAJANDO</div>
-                <p>El precio hace máximos y mínimos cada vez más bajos. Momento de vender o mantenerse fuera del mercado.</p>
-            </div>
-            <div class="card-tend lateral">
-                <div class="tend-titulo">➡️ Tendencia Lateral — ESTABLE</div>
-                <p>El precio oscila entre dos niveles sin dirección clara. Esperá una ruptura antes de entrar al mercado.</p>
-            </div>
-        </div>
-        <div class="seccion">
-            <h2>📊 Smart Money Concepts (SMC)</h2>
-            <div class="indicador">
-                <div class="ind-nombre">BOS — Break of Structure</div>
-                <p>Ruptura de estructura que confirma la dirección del mercado.</p>
-            </div>
-            <div class="indicador">
-                <div class="ind-nombre">Order Blocks (OB)</div>
-                <p>Zonas donde los institucionales acumularon posiciones. Son las áreas de mayor probabilidad de rebote.</p>
-            </div>
-            <div class="indicador">
-                <div class="ind-nombre">⚡ Sistema de Confluencias</div>
-                <div class="ind-reglas">
-                    <span class="regla compra">3-4 confluencias → SEÑAL FUERTE 🟢</span>
-                    <span class="regla neutral">2 confluencias → SEÑAL MEDIA 🟡</span>
-                    <span class="regla venta">0-1 confluencias → ESPERAR ⚪</span>
-                </div>
-            </div>
-        </div>
-        <div class="seccion aviso">
-            <h2>⚠️ Aviso Legal</h2>
-            <p>BitMind es una herramienta informativa. Las señales NO son asesoría financiera. Invertir en criptomonedas implica riesgo de pérdida de capital.</p>
-        </div>
-        """
-    else:
-        titulo = "O que é BitMind?"
-        contenido = """
-        <div class="seccion">
-            <h2>🤖 O que é BitMind?</h2>
-            <p>BitMind é uma plataforma de sinais de trading com Inteligência Artificial que analisa o mercado de criptomoedas em tempo real, combinando Smart Money Concepts (SMC) e machine learning.</p>
-        </div>
-        <div class="seccion">
-            <h2>📈 A Tendência — O Rei do Trading</h2>
-            <p>Os traders profissionais dizem: <em>"A tendência é sua amiga"</em>. 80% dos lucros no trading vêm de operar a favor da tendência.</p>
-            <div class="card-tend alcista">
-                <div class="tend-titulo">📈 Tendência de Alta — SUBINDO</div>
-                <p>O preço faz máximas e mínimas cada vez mais altas. É o melhor momento para comprar.</p>
-            </div>
-            <div class="card-tend bajista">
-                <div class="tend-titulo">📉 Tendência de Baixa — CAINDO</div>
-                <p>O preço faz máximas e mínimas cada vez mais baixas. Momento de vender ou ficar fora.</p>
-            </div>
-            <div class="card-tend lateral">
-                <div class="tend-titulo">➡️ Tendência Lateral — ESTÁVEL</div>
-                <p>O preço oscila sem direção clara. Aguarde uma ruptura antes de entrar.</p>
-            </div>
-        </div>
-        <div class="seccion">
-            <h2>📊 Smart Money Concepts (SMC)</h2>
-            <div class="indicador">
-                <div class="ind-nombre">BOS — Break of Structure</div>
-                <p>Ruptura de estrutura que confirma a direção do mercado.</p>
-            </div>
-            <div class="indicador">
-                <div class="ind-nombre">Order Blocks (OB)</div>
-                <p>Zonas onde os institucionais acumularam posições. Áreas de maior probabilidade de rebote.</p>
-            </div>
-            <div class="indicador">
-                <div class="ind-nombre">⚡ Sistema de Confluências</div>
-                <div class="ind-reglas">
-                    <span class="regla compra">3-4 confluências → SINAL FORTE 🟢</span>
-                    <span class="regla neutral">2 confluências → SINAL MÉDIO 🟡</span>
-                    <span class="regla venta">0-1 confluências → AGUARDAR ⚪</span>
-                </div>
-            </div>
-        </div>
-        <div class="seccion aviso">
-            <h2>⚠️ Aviso Legal</h2>
-            <p>BitMind é uma ferramenta informativa. Os sinais NÃO são assessoria financeira. Investir em criptomoedas implica risco de perda de capital.</p>
-        </div>
-        """
-
-    return f"""
-    <html>
-    <head>
-        <title>BitMind — {titulo}</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-            * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-            body {{ font-family: Arial, sans-serif; background: #0d0d1a; color: white; min-height: 100vh; }}
-            .header {{ background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 20px; text-align: center; border-bottom: 2px solid #f0a500; position: relative; }}
-            .logo {{ font-size: 28px; font-weight: bold; color: #f0a500; letter-spacing: 2px; }}
-            .logo span {{ color: white; }}
-            .lang-btn {{ position: absolute; top: 20px; right: 15px; background: #16213e; border: 1px solid #f0a500; color: #f0a500; padding: 6px 12px; border-radius: 20px; text-decoration: none; font-size: 13px; }}
-            .container {{ max-width: 600px; margin: 0 auto; padding: 20px 15px; }}
-            .seccion {{ background: #16213e; border-radius: 16px; padding: 20px; margin-bottom: 15px; border: 1px solid #ffffff11; }}
-            .seccion h2 {{ color: #f0a500; font-size: 18px; margin-bottom: 12px; }}
-            .seccion p {{ font-size: 15px; line-height: 1.7; color: #ddd; margin-bottom: 10px; }}
-            .seccion em {{ color: #f0a500; font-style: italic; }}
-            .card-tend {{ border-radius: 12px; padding: 15px; margin: 10px 0; }}
-            .alcista {{ background: #0d2b1a; border-left: 4px solid #00ff88; }}
-            .bajista {{ background: #2b0d0d; border-left: 4px solid #ff4444; }}
-            .lateral {{ background: #2b2b0d; border-left: 4px solid orange; }}
-            .tend-titulo {{ font-weight: bold; font-size: 16px; margin-bottom: 8px; }}
-            .alcista .tend-titulo {{ color: #00ff88; }}
-            .bajista .tend-titulo {{ color: #ff4444; }}
-            .lateral .tend-titulo {{ color: orange; }}
-            .indicador {{ background: #0d0d2b; border-radius: 12px; padding: 15px; margin: 10px 0; }}
-            .ind-nombre {{ color: #f0a500; font-weight: bold; font-size: 15px; margin-bottom: 8px; }}
-            .ind-reglas {{ display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }}
-            .regla {{ padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: bold; }}
-            .compra {{ background: #0d2b1a; color: #00ff88; }}
-            .venta {{ background: #2b0d0d; color: #ff4444; }}
-            .neutral {{ background: #2b2b0d; color: orange; }}
-            .aviso {{ border-left: 4px solid #ff4444; }}
-            .aviso h2 {{ color: #ff4444; }}
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <a href="{btn_url}" class="lang-btn">{btn_lang}</a>
-            <div class="logo">Bit<span>Mind</span></div>
-            <div style="font-size:14px;color:#aaa;margin-top:4px;">{titulo}</div>
-        </div>
-        <div class="container">
-            <a href="/?lang={lang}" style="color:#f0a500;font-size:14px;display:block;margin-bottom:15px;">{home_txt}</a>
-            {contenido}
-        </div>
-    </body>
-    </html>
-    """
-
-
-@app.get("/stats", response_class=HTMLResponse)
-def stats():
-    return f"""
-    <html>
-    <head>
-        <title>BitMind — Stats</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta http-equiv="refresh" content="30">
-        <style>
-            * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-            body {{ font-family: Arial, sans-serif; background: #0d0d1a; color: white; min-height: 100vh; }}
-            .header {{ background: linear-gradient(135deg, #1a1a2e, #16213e); padding: 20px; text-align: center; border-bottom: 2px solid #f0a500; }}
-            .logo {{ font-size: 28px; font-weight: bold; color: #f0a500; letter-spacing: 2px; }}
-            .logo span {{ color: white; }}
-            .container {{ max-width: 600px; margin: 0 auto; padding: 20px 15px; }}
-            .total {{ background: #16213e; border-radius: 16px; padding: 25px; text-align: center; margin-bottom: 15px; border: 2px solid #f0a500; }}
-            .total-num {{ font-size: 60px; font-weight: bold; color: #f0a500; }}
-            .total-txt {{ font-size: 14px; color: #aaa; margin-top: 5px; }}
-            .card {{ background: #16213e; border-radius: 12px; padding: 15px 20px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #ffffff11; }}
-            .card-nombre {{ font-size: 18px; font-weight: bold; color: #f0a500; }}
-            .card-num {{ font-size: 24px; font-weight: bold; color: white; }}
-            .aviso {{ text-align: center; color: #555; font-size: 12px; padding: 15px; }}
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <div class="logo">Bit<span>Mind</span></div>
-            <div style="font-size:14px;color:#aaa;margin-top:4px;">Dashboard de Visitas</div>
-        </div>
-        <div class="container">
-            <a href="/" style="color:#f0a500;font-size:14px;display:block;margin-bottom:15px;">← Volver</a>
-            <div class="total">
-                <div class="total-num">{visitas['total']}</div>
-                <div class="total-txt">Total de visitas</div>
-            </div>
-            <div class="card"><div class="card-nombre">₿ Bitcoin</div><div class="card-num">{visitas['BTC']}</div></div>
-            <div class="card"><div class="card-nombre">Ξ Ethereum</div><div class="card-num">{visitas['ETH']}</div></div>
-            <div class="card"><div class="card-nombre">◎ Solana</div><div class="card-num">{visitas['SOL']}</div></div>
-            <div class="card"><div class="card-nombre">⬡ BNB</div><div class="card-num">{visitas['BNB']}</div></div>
-            <div class="card"><div class="card-nombre">✕ XRP</div><div class="card-num">{visitas['XRP']}</div></div>
-            <div class="card"><div class="card-nombre">📊 Resumen</div><div class="card-num">{visitas['resumen']}</div></div>
-            <div class="card"><div class="card-nombre">ℹ️ About</div><div class="card-num">{visitas['about']}</div></div>
-            <div class="aviso">⚠️ Las visitas se reinician cuando el servidor duerme</div>
-        </div>
-    </body>
-    </html>
-    """
-    @app.get("/test-telegram")
-async def test_telegram():
-    try:
-        for cripto in PARES:
-            simbolo = PARES[cripto]["simbolo"]
-            precio = obtener_precio(simbolo)
-            cierres, highs, lows = obtener_velas_6h(simbolo)
-            if len(cierres) >= 20:
-                confluencias, detalles, rsi, mm20, mm50 = calcular_confluencias(cierres, highs, lows, precio)
-                decision, color, estructura = determinar_senal(precio, confluencias, detalles, cierres)
-                enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles)
-        return {"status": "ok", "mensaje": "Señales enviadas"}
-    except Exception as e:
-        return {"status": "error", "detalle": str(e)}
-
-import asyncio
-
-async def loop_analisis():
-    while True:
-        try:
-            for cripto in PARES:
-                simbolo = PARES[cripto]["simbolo"]
-                precio = obtener_precio(simbolo)
-                cierres, highs, lows = obtener_velas_6h(simbolo)
-                if len(cierres) >= 20:
-                    confluencias, detalles, rsi, mm20, mm50 = calcular_confluencias(cierres, highs, lows, precio)
-                    decision, color, estructura = determinar_senal(precio, confluencias, detalles, cierres)
-                    if confluencias >= 3:
-                        enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles)
-        except Exception as e:
-            print(f"Error en loop: {e}")
-        await asyncio.sleep(21600)
-
-@app.on_event("startup")
-async def iniciar_scheduler():
-    asyncio.create_task(loop_analisis())
+    
