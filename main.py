@@ -737,6 +737,11 @@ def enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles
         print(f"Error enviando Telegram: {e}")
 
 
+@app.get("/ping")
+async def ping():
+    return {"status": "ok", "message": "BitMind alive!"}
+
+
 @app.get("/test-telegram")
 async def test_telegram():
     try:
