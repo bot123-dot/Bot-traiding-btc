@@ -712,6 +712,27 @@ def stats():
     </body>
     </html>
     """
+    @app.get("/test-telegram")
+async def test_telegram():
+    try:
+        for cripto in PARES:
+            simbolo = PARES[cripto]["simbolo"]
+            precio = obtener_precio(simbolo)
+            cierres, highs, lows = obtener_velas_6h(simbolo)
+            if len(cierres) >= 20:
+                confluencias, detalles, rsi, mm20, mm50 = calcular_confluencias(
+                    cierres, highs, lows, precio
+                )
+                decision, color, estructura = determinar_senal(
+                    precio, confluencias, detalles, cierres
+                )
+                enviar_telegram(
+                    cripto, precio, decision,
+                    confluencias, estructura, detalles
+                )
+        return {"status": "ok", "mensaje": "Señales enviadas a Telegram"}
+    except Exception as e:
+        return {"status": "error", "detalle": str(e)}
 # ============ SCHEDULER AUTOMÁTICO ============
 import asyncio
 import threading
