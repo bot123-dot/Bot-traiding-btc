@@ -5,3 +5,4 @@ anthropic
 stripe
 mercadopago
 python-multipart
+matplotlib
