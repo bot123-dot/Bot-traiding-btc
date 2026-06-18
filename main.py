@@ -737,6 +737,779 @@ def enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles
         print(f"Error enviando Telegram: {e}")
 
 
+
+@app.get("/landing", response_class=HTMLResponse)
+async def landing_page():
+    return HTMLResponse(content="""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BitMind — Sinais SMC em Tempo Real</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+
+  :root {
+    --black: #080B10;
+    --surface: #0E1117;
+    --card: #141920;
+    --border: #1E2732;
+    --green: #00FF88;
+    --green-dim: #00CC6A;
+    --red: #FF4444;
+    --gold: #FFB800;
+    --white: #F0F4F8;
+    --muted: #6B7A8D;
+    --font-display: 'Space Mono', monospace;
+    --font-body: 'Space Grotesk', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--black);
+    color: var(--white);
+    font-family: var(--font-body);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* ── TICKER ── */
+  .ticker {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .ticker-inner {
+    display: inline-block;
+    animation: ticker 30s linear infinite;
+  }
+  .ticker-inner span {
+    font-family: var(--font-display);
+    font-size: 11px;
+    color: var(--muted);
+    margin: 0 32px;
+    letter-spacing: 0.05em;
+  }
+  .ticker-inner span b { color: var(--green); }
+  .ticker-inner span.red b { color: var(--red); }
+  @keyframes ticker {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+
+  /* ── NAV ── */
+  nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: rgba(8,11,16,0.95);
+    backdrop-filter: blur(12px);
+    z-index: 100;
+  }
+  .logo {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .logo span { color: var(--green); }
+  nav a {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+  nav a:hover { color: var(--white); }
+  .nav-links { display: flex; gap: 24px; align-items: center; }
+  .btn-nav {
+    background: var(--green);
+    color: var(--black) !important;
+    padding: 8px 18px;
+    border-radius: 6px;
+    font-weight: 700 !important;
+    font-size: 13px !important;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    padding: 80px 24px 64px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: -100px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, rgba(0,255,136,0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0,255,136,0.08);
+    border: 1px solid rgba(0,255,136,0.2);
+    border-radius: 100px;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--green);
+    margin-bottom: 32px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .hero-badge::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+  }
+  .hero h1 {
+    font-family: var(--font-display);
+    font-size: clamp(32px, 8vw, 64px);
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+    margin-bottom: 24px;
+  }
+  .hero h1 em {
+    font-style: normal;
+    color: var(--green);
+  }
+  .hero p {
+    font-size: clamp(16px, 3vw, 20px);
+    color: var(--muted);
+    max-width: 560px;
+    margin: 0 auto 48px;
+  }
+  .hero-cta {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--green);
+    color: var(--black);
+    padding: 14px 28px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 15px;
+    text-decoration: none;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(0,255,136,0.25);
+  }
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: transparent;
+    color: var(--white);
+    padding: 14px 28px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 15px;
+    text-decoration: none;
+    border: 1px solid var(--border);
+    transition: border-color 0.2s;
+  }
+  .btn-secondary:hover { border-color: var(--muted); }
+
+  /* ── SIGNAL PREVIEW ── */
+  .signal-preview {
+    margin: 64px auto 0;
+    max-width: 360px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    text-align: left;
+    position: relative;
+  }
+  .signal-preview::before {
+    content: '🤖 BitMind Signal';
+    display: block;
+    font-family: var(--font-display);
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+  .signal-header {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 16px;
+  }
+  .signal-header .buy { color: var(--green); }
+  .signal-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .signal-row:last-child { border-bottom: none; }
+  .signal-row .label { color: var(--muted); }
+  .signal-row .value { font-weight: 600; font-family: var(--font-display); }
+  .confluencia-bar {
+    display: flex;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .confluencia-bar span {
+    width: 28px;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--green);
+  }
+  .confluencia-bar span.empty {
+    background: var(--border);
+  }
+  .signal-tag {
+    position: absolute;
+    top: -12px;
+    right: 20px;
+    background: var(--green);
+    color: var(--black);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 100px;
+    letter-spacing: 0.05em;
+  }
+
+  /* ── STATS ── */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--border);
+    margin: 64px 0 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .stat {
+    background: var(--black);
+    padding: 32px 24px;
+    text-align: center;
+  }
+  .stat-num {
+    font-family: var(--font-display);
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--green);
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .stat-label {
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  /* ── SECTION ── */
+  section {
+    padding: 80px 24px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .section-label {
+    font-family: var(--font-display);
+    font-size: 11px;
+    color: var(--green);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .section-title {
+    font-family: var(--font-display);
+    font-size: clamp(24px, 5vw, 40px);
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 16px;
+    letter-spacing: -0.02em;
+  }
+  .section-sub {
+    color: var(--muted);
+    font-size: 16px;
+    max-width: 520px;
+    margin-bottom: 48px;
+  }
+
+  /* ── SMC FEATURES ── */
+  .features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+  }
+  .feature-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    transition: border-color 0.2s;
+  }
+  .feature-card:hover { border-color: rgba(0,255,136,0.3); }
+  .feature-icon {
+    font-size: 28px;
+    margin-bottom: 16px;
+  }
+  .feature-card h3 {
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    letter-spacing: -0.01em;
+  }
+  .feature-card p {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  /* ── PLANS ── */
+  .plans {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    margin-top: 0;
+  }
+  .plan-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px 24px;
+    position: relative;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .plan-card:hover { transform: translateY(-4px); }
+  .plan-card.featured {
+    border-color: var(--green);
+    background: linear-gradient(135deg, rgba(0,255,136,0.05), var(--card));
+  }
+  .plan-badge {
+    position: absolute;
+    top: -12px;
+    left: 24px;
+    background: var(--green);
+    color: var(--black);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 14px;
+    border-radius: 100px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .plan-name {
+    font-family: var(--font-display);
+    font-size: 13px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .plan-price {
+    font-family: var(--font-display);
+    font-size: 40px;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .plan-price span {
+    font-size: 16px;
+    font-weight: 400;
+    color: var(--muted);
+  }
+  .plan-period {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 24px;
+  }
+  .plan-features {
+    list-style: none;
+    margin-bottom: 32px;
+  }
+  .plan-features li {
+    font-size: 14px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .plan-features li:last-child { border-bottom: none; }
+  .plan-features li::before {
+    content: '✓';
+    color: var(--green);
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .plan-features li.locked::before { content: '✗'; color: var(--muted); }
+  .plan-features li.locked { color: var(--muted); }
+  .btn-plan {
+    display: block;
+    text-align: center;
+    padding: 12px;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 14px;
+    text-decoration: none;
+    transition: all 0.2s;
+  }
+  .btn-plan.green {
+    background: var(--green);
+    color: var(--black);
+  }
+  .btn-plan.green:hover { box-shadow: 0 4px 20px rgba(0,255,136,0.3); }
+  .btn-plan.outline {
+    border: 1px solid var(--border);
+    color: var(--white);
+  }
+  .btn-plan.outline:hover { border-color: var(--muted); }
+
+  /* ── BILINGUAL NOTE ── */
+  .bilingual {
+    text-align: center;
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 16px;
+  }
+
+  /* ── HOW IT WORKS ── */
+  .steps {
+    display: grid;
+    gap: 16px;
+  }
+  .step {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+  }
+  .step-num {
+    font-family: var(--font-display);
+    font-size: 13px;
+    color: var(--green);
+    font-weight: 700;
+    flex-shrink: 0;
+    padding-top: 2px;
+  }
+  .step h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .step p { font-size: 14px; color: var(--muted); }
+
+  /* ── CTA FINAL ── */
+  .cta-final {
+    text-align: center;
+    padding: 80px 24px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+  .cta-final h2 {
+    font-family: var(--font-display);
+    font-size: clamp(24px, 5vw, 40px);
+    font-weight: 700;
+    margin-bottom: 16px;
+    letter-spacing: -0.02em;
+  }
+  .cta-final p { color: var(--muted); margin-bottom: 40px; font-size: 16px; }
+
+  /* ── FOOTER ── */
+  footer {
+    background: var(--black);
+    border-top: 1px solid var(--border);
+    padding: 32px 24px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  footer a { color: var(--muted); text-decoration: none; }
+  footer a:hover { color: var(--white); }
+
+  @media (max-width: 600px) {
+    .stats { grid-template-columns: 1fr; }
+    .nav-links { gap: 12px; }
+    .nav-links a:not(.btn-nav) { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- TICKER -->
+<div class="ticker">
+  <div class="ticker-inner">
+    <span>BTC/USD <b>$97,420</b> ▲ 2.3%</span>
+    <span class="red">ETH/USD <b>$1,744</b> ▼ 0.8%</span>
+    <span>SOL/USD <b>$71.94</b> ▲ 1.1%</span>
+    <span>BNB/USD <b>$601</b> ▲ 0.5%</span>
+    <span class="red">XRP/USD <b>$0.58</b> ▼ 1.2%</span>
+    <span>BTC/USD <b>$97,420</b> ▲ 2.3%</span>
+    <span class="red">ETH/USD <b>$1,744</b> ▼ 0.8%</span>
+    <span>SOL/USD <b>$71.94</b> ▲ 1.1%</span>
+    <span>BNB/USD <b>$601</b> ▲ 0.5%</span>
+    <span class="red">XRP/USD <b>$0.58</b> ▼ 1.2%</span>
+  </div>
+</div>
+
+<!-- NAV -->
+<nav>
+  <div class="logo">Bit<span>Mind</span></div>
+  <div class="nav-links">
+    <a href="#como-funciona">Como funciona</a>
+    <a href="#planos">Planos</a>
+    <a href="https://bitmind.app.br" target="_blank">Plataforma</a>
+    <a href="https://t.me/bitmind_signals" target="_blank" class="btn-nav">↗ Entrar grátis</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-badge">🟢 Sinais ao vivo · Señales en vivo</div>
+  <h1>
+    Inteligência SMC<br>
+    para seu <em>próximo trade</em>
+  </h1>
+  <p>
+    Análise automática de BTC, ETH, SOL, BNB e XRP com Smart Money Concepts. 
+    Receba sinais de alta confluência direto no Telegram — grátis.
+  </p>
+  <div class="hero-cta">
+    <a href="https://t.me/bitmind_signals" target="_blank" class="btn-primary">
+      📲 Entrar no canal grátis
+    </a>
+    <a href="https://bitmind.app.br" target="_blank" class="btn-secondary">
+      Ver plataforma →
+    </a>
+  </div>
+
+  <!-- Signal preview card -->
+  <div class="signal-preview">
+    <div class="signal-tag">AO VIVO</div>
+    <div class="signal-header">
+      <span class="buy">🟢 COMPRAR</span> — BTC/USD
+    </div>
+    <div class="signal-row">
+      <span class="label">💰 Precio</span>
+      <span class="value">$97,420</span>
+    </div>
+    <div class="signal-row">
+      <span class="label">⚡ Confluências SMC</span>
+      <span class="value">
+        <div class="confluencia-bar">
+          <span></span><span></span><span></span><span class="empty"></span>
+        </div>
+      </span>
+    </div>
+    <div class="signal-row">
+      <span class="label">📊 Estructura</span>
+      <span class="value">Alcista</span>
+    </div>
+    <div class="signal-row">
+      <span class="label">✅ BOS detectado</span>
+      <span class="value" style="color:var(--green)">Sim</span>
+    </div>
+    <div class="signal-row">
+      <span class="label">✅ Order Block</span>
+      <span class="value" style="color:var(--green)">$95,800–$96,200</span>
+    </div>
+  </div>
+</div>
+
+<!-- STATS -->
+<div class="stats">
+  <div class="stat">
+    <div class="stat-num">5</div>
+    <div class="stat-label">Criptos monitoradas</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">6h</div>
+    <div class="stat-label">Análise automática</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">4</div>
+    <div class="stat-label">Indicadores SMC</div>
+  </div>
+</div>
+
+<!-- COMO FUNCIONA -->
+<section id="como-funciona">
+  <div class="section-label">// Como funciona · Cómo funciona</div>
+  <h2 class="section-title">Do mercado ao seu Telegram<br>em segundos</h2>
+  <p class="section-sub">O motor BitMind analisa o mercado a cada 6 horas e envia sinais apenas quando há alta confluência de indicadores SMC.</p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">01</div>
+      <div>
+        <h3>Coleta de dados via Coinbase</h3>
+        <p>Velas de 6 horas para BTC, ETH, SOL, BNB e XRP — dados reais do mercado em tempo real.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">02</div>
+      <div>
+        <h3>Análise SMC com 4 indicadores</h3>
+        <p>RSI, Médias Móveis MM20/MM50, Order Blocks e BOS/CHoCH — confluência de 0 a 4.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">03</div>
+      <div>
+        <h3>Sinal enviado com 3+ confluências</h3>
+        <p>Apenas alertas de alta qualidade chegam ao canal. Sem ruído, sem spam.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">04</div>
+      <div>
+        <h3>Análise detalhada na plataforma</h3>
+        <p>Acesse bitmind.app.br para ver o dashboard completo com todos os indicadores.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SMC FEATURES -->
+<section style="padding-top: 0;">
+  <div class="section-label">// Motor SMC</div>
+  <h2 class="section-title">Smart Money Concepts<br>no piloto automático</h2>
+  <p class="section-sub">Os mesmos conceitos usados por traders institucionais, agora automatizados.</p>
+
+  <div class="features">
+    <div class="feature-card">
+      <div class="feature-icon">📈</div>
+      <h3>RSI 6H</h3>
+      <p>Identifica sobrecompra e sobrevenda em velas de 6 horas para filtrar entradas precisas.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">〰️</div>
+      <h3>MM20 / MM50</h3>
+      <p>Médias móveis para confirmar tendência e estrutura de mercado antes de qualquer sinal.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🧱</div>
+      <h3>Order Blocks</h3>
+      <p>Detecta zonas de liquidez institucional — onde o dinheiro grande entra no mercado.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔄</div>
+      <h3>BOS / CHoCH</h3>
+      <p>Break of Structure e Change of Character para identificar reversões e continuações.</p>
+    </div>
+  </div>
+</section>
+
+<!-- PLANOS -->
+<section id="planos">
+  <div class="section-label">// Planos · Planes</div>
+  <h2 class="section-title">Comece grátis.<br>Escale quando quiser.</h2>
+  <p class="section-sub">Acesso ao canal Telegram sem custo. VIP e plataforma completa em breve.</p>
+
+  <div class="plans">
+    <!-- FREE -->
+    <div class="plan-card">
+      <div class="plan-name">Free · Grátis</div>
+      <div class="plan-price">R$ 0<span>/mês</span></div>
+      <div class="plan-period">Para sempre gratuito</div>
+      <ul class="plan-features">
+        <li>Canal Telegram @bitmind_signals</li>
+        <li>Sinais BTC, ETH, SOL, BNB, XRP</li>
+        <li>Análise a cada 6 horas</li>
+        <li>Alertas com 3+ confluências SMC</li>
+        <li class="locked">Plataforma web completa</li>
+        <li class="locked">Sinais VIP prioritários</li>
+        <li class="locked">Suporte direto</li>
+      </ul>
+      <a href="https://t.me/bitmind_signals" target="_blank" class="btn-plan outline">
+        📲 Entrar no canal
+      </a>
+    </div>
+
+    <!-- VIP -->
+    <div class="plan-card featured">
+      <div class="plan-badge">EM BREVE</div>
+      <div class="plan-name">VIP · Pro</div>
+      <div class="plan-price">R$ 47<span>/mês</span></div>
+      <div class="plan-period">Acesso completo · Acceso completo</div>
+      <ul class="plan-features">
+        <li>Tudo do plano Free</li>
+        <li>Plataforma bitmind.app.br</li>
+        <li>Sinais prioritários antes do canal</li>
+        <li>Análise detalhada por cripto</li>
+        <li>Scalping 1m/5m/15m (em breve)</li>
+        <li>Suporte via Telegram</li>
+        <li>Atualizações exclusivas</li>
+      </ul>
+      <a href="https://t.me/bitmind_signals" target="_blank" class="btn-plan green">
+        🔔 Entrar na lista VIP
+      </a>
+    </div>
+  </div>
+  <p class="bilingual">🇧🇷 Português · 🇪🇸 Español — Sinais disponíveis nos dois idiomas</p>
+</section>
+
+<!-- CTA FINAL -->
+<div class="cta-final">
+  <h2>Pronto para operar<br>com inteligência?</h2>
+  <p>Entre no canal gratuito e receba o próximo sinal SMC direto no seu Telegram.</p>
+  <div class="hero-cta">
+    <a href="https://t.me/bitmind_signals" target="_blank" class="btn-primary">
+      📲 Entrar grátis no Telegram
+    </a>
+    <a href="https://bitmind.app.br" target="_blank" class="btn-secondary">
+      Ver plataforma →
+    </a>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <p style="margin-bottom:12px;">
+    <strong style="color:var(--white);">BitMind</strong> — Análise SMC automatizada
+  </p>
+  <p>
+    <a href="https://bitmind.app.br">Plataforma</a> · 
+    <a href="https://t.me/bitmind_signals">Telegram</a>
+  </p>
+  <p style="margin-top:16px; font-size:12px;">
+    ⚠️ Não é consultoria financeira. Opere com responsabilidade. · No es asesoría financiera.
+  </p>
+</footer>
+
+</body>
+</html>
+""")
+
 @app.get("/ping")
 async def ping():
     return {"status": "ok", "message": "BitMind alive!"}
