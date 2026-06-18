@@ -1288,7 +1288,7 @@ async def landing_page():
     <a href="#como-funciona">Como funciona</a>
     <a href="#planos">Planos</a>
     <a href="https://bitmind.app.br" target="_blank">Plataforma</a>
-    <a href="https://t.me/bitmind_signals" target="_blank" class="btn-nav">↗ Entrar grátis</a>
+    <a href="https://t.me/bitmind_signals_br" target="_blank" class="btn-nav">↗ Entrar grátis</a>
   </div>
 </nav>
 
@@ -1304,7 +1304,7 @@ async def landing_page():
     Receba sinais de alta confluência direto no Telegram — grátis.
   </p>
   <div class="hero-cta">
-    <a href="https://t.me/bitmind_signals" target="_blank" class="btn-primary">
+    <a href="https://t.me/bitmind_signals_br" target="_blank" class="btn-primary">
       📲 Entrar no canal grátis
     </a>
     <a href="https://bitmind.app.br" target="_blank" class="btn-secondary">
@@ -1450,7 +1450,7 @@ async def landing_page():
         <li class="locked">Sinais VIP prioritários</li>
         <li class="locked">Suporte direto</li>
       </ul>
-      <a href="https://t.me/bitmind_signals" target="_blank" class="btn-plan outline">
+      <a href="https://t.me/bitmind_signals_br" target="_blank" class="btn-plan outline">
         📲 Entrar no canal
       </a>
     </div>
@@ -1470,7 +1470,7 @@ async def landing_page():
         <li>Suporte via Telegram</li>
         <li>Atualizações exclusivas</li>
       </ul>
-      <a href="https://t.me/bitmind_signals" target="_blank" class="btn-plan green">
+      <a href="https://t.me/bitmind_signals_br" target="_blank" class="btn-plan green">
         🔔 Entrar na lista VIP
       </a>
     </div>
@@ -1483,7 +1483,7 @@ async def landing_page():
   <h2>Pronto para operar<br>com inteligência?</h2>
   <p>Entre no canal gratuito e receba o próximo sinal SMC direto no seu Telegram.</p>
   <div class="hero-cta">
-    <a href="https://t.me/bitmind_signals" target="_blank" class="btn-primary">
+    <a href="https://t.me/bitmind_signals_br" target="_blank" class="btn-primary">
       📲 Entrar grátis no Telegram
     </a>
     <a href="https://bitmind.app.br" target="_blank" class="btn-secondary">
@@ -1499,7 +1499,7 @@ async def landing_page():
   </p>
   <p>
     <a href="https://bitmind.app.br">Plataforma</a> · 
-    <a href="https://t.me/bitmind_signals">Telegram</a>
+    <a href="https://t.me/bitmind_signals_br">Telegram</a>
   </p>
   <p style="margin-top:16px; font-size:12px;">
     ⚠️ Não é consultoria financeira. Opere com responsabilidade. · No es asesoría financiera.
