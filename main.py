@@ -58,27 +58,82 @@ def calcular_mm(precios, periodo=20):
         return None
     return round(sum(precios[-periodo:]) / periodo, 2)
 
-def detectar_bos(highs, lows):
-    if len(highs) < 5:
-        return "Indeterminado"
-    ultimo_max = max(highs[-5:-1])
-    ultimo_min = min(lows[-5:-1])
-    precio_actual = highs[-1]
-    if precio_actual > ultimo_max:
-        return "Alcista (BOS ↗)"
-    elif precio_actual < ultimo_min:
-        return "Bajista (BOS ↘)"
-    return "Lateral"
+def detectar_choch(highs, lows, cierres):
+    """CHoCH real con swing highs/lows — detecta cambio de tendencia"""
+    if len(highs) < 10:
+        return "Indeterminado", False
+    h = highs[-10:]
+    l = lows[-10:]
+    swing_highs = []
+    swing_lows = []
+    for i in range(1, len(h)-1):
+        if h[i] > h[i-1] and h[i] > h[i+1]:
+            swing_highs.append((i, h[i]))
+        if l[i] < l[i-1] and l[i] < l[i+1]:
+            swing_lows.append((i, l[i]))
+    if len(swing_highs) < 2 or len(swing_lows) < 2:
+        # Fallback a BOS simple
+        ultimo_max = max(highs[-5:-1])
+        ultimo_min = min(lows[-5:-1])
+        precio_actual = cierres[-1]
+        if precio_actual > ultimo_max:
+            return "Alcista (BOS ↗)", False
+        elif precio_actual < ultimo_min:
+            return "Bajista (BOS ↘)", False
+        return "Lateral", False
+    ultimo_sh = swing_highs[-1][1]
+    penultimo_sh = swing_highs[-2][1]
+    ultimo_sl = swing_lows[-1][1]
+    penultimo_sl = swing_lows[-2][1]
+    precio_actual = cierres[-1]
+    choch_detectado = False
+    if precio_actual > ultimo_sh and ultimo_sh > penultimo_sh:
+        estructura = "Alcista (BOS ↗)"
+    elif precio_actual < ultimo_sl and ultimo_sl < penultimo_sl:
+        estructura = "Bajista (BOS ↘)"
+    elif precio_actual > ultimo_sh and ultimo_sh < penultimo_sh:
+        estructura = "CHoCH Alcista 🔄"
+        choch_detectado = True
+    elif precio_actual < ultimo_sl and ultimo_sl > penultimo_sl:
+        estructura = "CHoCH Bajista 🔄"
+        choch_detectado = True
+    else:
+        estructura = "Lateral"
+    return estructura, choch_detectado
 
 def detectar_order_block(cierres, highs, lows):
     if len(cierres) < 10:
         return None, None
     for i in range(len(cierres)-2, max(len(cierres)-10, 0), -1):
         if cierres[i] < cierres[i-1] and cierres[i+1] > cierres[i]:
-            ob_high = highs[i]
-            ob_low = lows[i]
-            return round(ob_low, 2), round(ob_high, 2)
+            return round(lows[i], 2), round(highs[i], 2)
     return None, None
+
+def detectar_fvg(highs, lows, cierres):
+    """Fair Value Gap — desequilibrio institucional entre 3 velas"""
+    if len(cierres) < 5:
+        return None, None, None
+    for i in range(len(cierres)-3, max(len(cierres)-12, 1), -1):
+        if lows[i+1] > highs[i-1]:
+            return "Alcista", round(highs[i-1], 2), round(lows[i+1], 2)
+        elif highs[i+1] < lows[i-1]:
+            return "Bajista", round(highs[i+1], 2), round(lows[i-1], 2)
+    return None, None, None
+
+def calcular_sl_tp(precio, estructura, ob_low, ob_high):
+    """Stop Loss y Take Profit dinámicos basados en SMC"""
+    sl = tp1 = tp2 = None
+    if "Alcista" in estructura or "CHoCH Alcista" in estructura:
+        sl = round(ob_low * 0.998, 2) if ob_low else round(precio * 0.98, 2)
+        riesgo = precio - sl
+        tp1 = round(precio + (riesgo * 1.5), 2)
+        tp2 = round(precio + (riesgo * 3), 2)
+    elif "Bajista" in estructura or "CHoCH Bajista" in estructura:
+        sl = round(ob_high * 1.002, 2) if ob_high else round(precio * 1.02, 2)
+        riesgo = sl - precio
+        tp1 = round(precio - (riesgo * 1.5), 2)
+        tp2 = round(precio - (riesgo * 3), 2)
+    return sl, tp1, tp2
 
 def calcular_confluencias(precio, cierres, highs, lows):
     confluencias = 0
@@ -87,8 +142,9 @@ def calcular_confluencias(precio, cierres, highs, lows):
     rsi_4h = calcular_rsi(cierres)
     mm20 = calcular_mm(cierres, 20)
     mm50 = calcular_mm(cierres, 50)
-    estructura = detectar_bos(highs, lows)
+    estructura, choch = detectar_choch(highs, lows, cierres)
     ob_low, ob_high = detectar_order_block(cierres, highs, lows)
+    fvg_tipo, fvg_low, fvg_high = detectar_fvg(highs, lows, cierres)
 
     # Confluencia 1: RSI
     if rsi_4h and rsi_4h < 35:
@@ -98,13 +154,13 @@ def calcular_confluencias(precio, cierres, highs, lows):
         confluencias += 1
         detalles.append(f"RSI sobrecomprado ({rsi_4h})")
 
-    # Confluencia 2: Estructura
+    # Confluencia 2: Estructura BOS / CHoCH
     if "Alcista" in estructura:
         confluencias += 1
-        detalles.append("BOS alcista confirmado")
+        detalles.append("CHoCH Alcista — cambio de tendencia 🔄" if choch else "BOS alcista confirmado")
     elif "Bajista" in estructura:
         confluencias += 1
-        detalles.append("BOS bajista confirmado")
+        detalles.append("CHoCH Bajista — cambio de tendencia 🔄" if choch else "BOS bajista confirmado")
 
     # Confluencia 3: Media Móvil
     if mm20 and mm50:
@@ -115,11 +171,13 @@ def calcular_confluencias(precio, cierres, highs, lows):
             confluencias += 1
             detalles.append("Precio bajo MM20 y MM50")
 
-    # Confluencia 4: Order Block
-    if ob_low and ob_high:
-        if ob_low <= precio <= ob_high:
-            confluencias += 1
-            detalles.append(f"Precio en OB ${ob_low}-${ob_high}")
+    # Confluencia 4: Order Block o Fair Value Gap
+    if ob_low and ob_high and ob_low <= precio <= ob_high:
+        confluencias += 1
+        detalles.append(f"Precio en OB ${ob_low}-${ob_high}")
+    elif fvg_tipo and fvg_low and fvg_high and fvg_low <= precio <= fvg_high:
+        confluencias += 1
+        detalles.append(f"FVG {fvg_tipo} detectado ${fvg_low}-${fvg_high}")
 
     return confluencias, detalles, rsi_4h, mm20, mm50, estructura, ob_low, ob_high
 
@@ -715,14 +773,28 @@ def enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles
             return
         emoji = "🟢" if decision == "COMPRAR" else "🔴"
         detalles_txt = "\n".join([f"✅ {d}" for d in detalles])
+        # Calcular SL/TP dinámico
+        ob_low = ob_high = None
+        for d in detalles:
+            if "OB $" in d:
+                try:
+                    partes = d.replace("Precio en OB $","").split("-$")
+                    ob_low = float(partes[0].replace(",",""))
+                    ob_high = float(partes[1].replace(",",""))
+                except:
+                    pass
+        sl, tp1, tp2 = calcular_sl_tp(precio, estructura, ob_low, ob_high)
+        sl_txt = f"\n🛑 *Stop Loss:* ${sl:,.2f}" if sl else ""
+        tp_txt = f"\n🎯 *TP1:* ${tp1:,.2f} | *TP2:* ${tp2:,.2f}" if tp1 and tp2 else ""
+        choch_txt = "\n🔄 *CHoCH detectado — posible reversión*" if "CHoCH" in estructura else ""
         mensaje = f"""🤖 *BitMind Signal*
 
 {emoji} *{decision}* — {cripto}/USD
-💰 Precio: ${precio:,.2f}
-⚡ {confluencias}/4 Confluencias SMC
-📊 Estructura: {estructura}
+💰 *Precio:* ${precio:,.2f}
+⚡ *{confluencias}/4* Confluencias SMC
+📊 *Estructura:* {estructura}{choch_txt}
 
-{detalles_txt}
+{detalles_txt}{sl_txt}{tp_txt}
 
 👉 [Ver análisis completo](https://bitmind.app.br)"""
         url = f"https://api.telegram.org/bot{token}/sendMessage"
