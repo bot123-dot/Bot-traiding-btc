@@ -4,6 +4,8 @@ import requests
 from anthropic import Anthropic
 import os
 from datetime import datetime, timezone, timedelta
+import io
+import base64
 
 app = FastAPI()
 client = Anthropic()
@@ -761,7 +763,76 @@ import asyncio
 
 ultima_senal_enviada = {"cripto": "", "decision": ""}
 
-def enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles):
+def generar_grafico_telegram(cripto, cierres, precio, mm20, mm50, ob_low, ob_high, decision):
+    """Genera imagen PNG del gráfico para enviar en Telegram"""
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        import matplotlib.patches as mpatches
+
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 6), gridspec_kw={'height_ratios': [3, 1]})
+        fig.patch.set_facecolor('#0d0d1a')
+
+        # Gráfico de precio
+        ultimos = cierres[-24:] if len(cierres) >= 24 else cierres
+        x = list(range(len(ultimos)))
+        color_linea = '#00ff88' if decision == "COMPRAR" else '#ff4444' if decision == "VENDER" else '#f0a500'
+
+        ax1.set_facecolor('#16213e')
+        ax1.plot(x, ultimos, color=color_linea, linewidth=2, zorder=3)
+        ax1.fill_between(x, ultimos, min(ultimos), alpha=0.15, color=color_linea)
+
+        # MM20 y MM50
+        if mm20:
+            ax1.axhline(y=mm20, color='#f0a500', linestyle='--', linewidth=1, alpha=0.7, label=f'MM20: ${mm20:,.0f}')
+        if mm50:
+            ax1.axhline(y=mm50, color='#aaaaaa', linestyle='--', linewidth=1, alpha=0.7, label=f'MM50: ${mm50:,.0f}')
+
+        # Order Block
+        if ob_low and ob_high:
+            ax1.axhspan(ob_low, ob_high, alpha=0.15, color='#9b59b6', label=f'OB: ${ob_low:,.0f}-${ob_high:,.0f}')
+
+        # Precio actual
+        ax1.axhline(y=precio, color='white', linestyle='-', linewidth=0.8, alpha=0.5)
+        ax1.text(len(x)-1, precio, f' ${precio:,.0f}', color='white', fontsize=9, va='center')
+
+        ax1.set_title(f'BitMind Signal — {cripto}/USD', color='white', fontsize=13, fontweight='bold', pad=10)
+        ax1.tick_params(colors='#aaa', labelsize=8)
+        ax1.spines[:].set_color('#333')
+        ax1.legend(loc='upper left', fontsize=8, facecolor='#16213e', labelcolor='white', framealpha=0.8)
+        ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f'${v:,.0f}'))
+
+        # RSI simplificado
+        ax2.set_facecolor('#16213e')
+        rsi_vals = []
+        for i in range(max(1, len(ultimos)-14), len(ultimos)):
+            sub = cierres[:i+1]
+            rsi_val = calcular_rsi(sub)
+            rsi_vals.append(rsi_val if rsi_val else 50)
+        if len(rsi_vals) < len(x):
+            rsi_vals = [50] * (len(x) - len(rsi_vals)) + rsi_vals
+        ax2.plot(x, rsi_vals, color='#f0a500', linewidth=1.5)
+        ax2.axhline(y=70, color='#ff4444', linestyle='--', linewidth=0.8, alpha=0.6)
+        ax2.axhline(y=30, color='#00ff88', linestyle='--', linewidth=0.8, alpha=0.6)
+        ax2.fill_between(x, rsi_vals, 50, alpha=0.1, color='#f0a500')
+        ax2.set_ylim(0, 100)
+        ax2.set_ylabel('RSI', color='#aaa', fontsize=8)
+        ax2.tick_params(colors='#aaa', labelsize=7)
+        ax2.spines[:].set_color('#333')
+
+        plt.tight_layout(pad=1.5)
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', dpi=120, facecolor='#0d0d1a', bbox_inches='tight')
+        plt.close()
+        buf.seek(0)
+        return buf
+    except Exception as e:
+        print(f"Error generando gráfico: {e}")
+        return None
+
+
+def enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles, cierres=None, mm20=None, mm50=None):
     global ultima_senal_enviada
     try:
         token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -773,7 +844,6 @@ def enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles
             return
         emoji = "🟢" if decision == "COMPRAR" else "🔴"
         detalles_txt = "\n".join([f"✅ {d}" for d in detalles])
-        # Calcular SL/TP dinámico
         ob_low = ob_high = None
         for d in detalles:
             if "OB $" in d:
@@ -787,7 +857,7 @@ def enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles
         sl_txt = f"\n🛑 *Stop Loss:* ${sl:,.2f}" if sl else ""
         tp_txt = f"\n🎯 *TP1:* ${tp1:,.2f} | *TP2:* ${tp2:,.2f}" if tp1 and tp2 else ""
         choch_txt = "\n🔄 *CHoCH detectado — posible reversión*" if "CHoCH" in estructura else ""
-        mensaje = f"""🤖 *BitMind Signal*
+        caption = f"""🤖 *BitMind Signal*
 
 {emoji} *{decision}* — {cripto}/USD
 💰 *Precio:* ${precio:,.2f}
@@ -797,12 +867,27 @@ def enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles
 {detalles_txt}{sl_txt}{tp_txt}
 
 👉 [Ver análisis completo](https://bitmind.app.br)"""
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        requests.post(url, json={
-            "chat_id": channel,
-            "text": mensaje,
-            "parse_mode": "Markdown"
-        })
+
+        # Intentar enviar con gráfico
+        grafico = None
+        if cierres:
+            grafico = generar_grafico_telegram(cripto, cierres, precio, mm20, mm50, ob_low, ob_high, decision)
+
+        if grafico:
+            url_photo = f"https://api.telegram.org/bot{token}/sendPhoto"
+            requests.post(url_photo, data={
+                "chat_id": channel,
+                "caption": caption,
+                "parse_mode": "Markdown"
+            }, files={"photo": ("chart.png", grafico, "image/png")})
+        else:
+            url_msg = f"https://api.telegram.org/bot{token}/sendMessage"
+            requests.post(url_msg, json={
+                "chat_id": channel,
+                "text": caption,
+                "parse_mode": "Markdown"
+            })
+
         ultima_senal_enviada = {"cripto": cripto, "decision": decision}
         print(f"✅ Señal enviada a Telegram: {cripto} {decision}")
     except Exception as e:
@@ -1600,11 +1685,22 @@ async def test_telegram():
                 decision_key, color, etiqueta = determinar_senal(precio, confluencias, detalles, estructura)
                 decision = "COMPRAR" if decision_key == "comprar" else "VENDER" if decision_key == "vender" else "ESPERAR"
                 if confluencias >= 3:
-                    enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles)
+                    enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles, cierres=cierres, mm20=mm20, mm50=mm50)
                 resultados.append(f"{cripto}: {decision} ({confluencias}/4)")
         return {"status": "ok", "resultados": resultados}
     except Exception as e:
         return {"status": "error", "detalle": str(e)}
+
+
+async def self_ping():
+    """Self-ping cada 10 minutos para mantener Render despierto"""
+    while True:
+        try:
+            await asyncio.sleep(600)  # 10 minutos
+            requests.get("https://bitmind.app.br/ping", timeout=10)
+            print("🔔 Self-ping OK")
+        except Exception as e:
+            print(f"Self-ping error: {e}")
 
 
 async def loop_analisis():
@@ -1619,7 +1715,7 @@ async def loop_analisis():
                     decision_key, color, etiqueta = determinar_senal(precio, confluencias, detalles, estructura)
                     decision = "COMPRAR" if decision_key == "comprar" else "VENDER" if decision_key == "vender" else "ESPERAR"
                     if confluencias >= 3:
-                        enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles)
+                        enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles, cierres=cierres, mm20=mm20, mm50=mm50)
         except Exception as e:
             print(f"Error en loop_analisis: {e}")
         await asyncio.sleep(21600)
@@ -1628,3 +1724,4 @@ async def loop_analisis():
 @app.on_event("startup")
 async def iniciar_scheduler():
     asyncio.create_task(loop_analisis())
+    asyncio.create_task(self_ping())
