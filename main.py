@@ -4,8 +4,6 @@ import requests
 from anthropic import Anthropic
 import os
 from datetime import datetime, timezone, timedelta
-import io
-import base64
 
 app = FastAPI()
 client = Anthropic()
@@ -60,82 +58,27 @@ def calcular_mm(precios, periodo=20):
         return None
     return round(sum(precios[-periodo:]) / periodo, 2)
 
-def detectar_choch(highs, lows, cierres):
-    """CHoCH real con swing highs/lows — detecta cambio de tendencia"""
-    if len(highs) < 10:
-        return "Indeterminado", False
-    h = highs[-10:]
-    l = lows[-10:]
-    swing_highs = []
-    swing_lows = []
-    for i in range(1, len(h)-1):
-        if h[i] > h[i-1] and h[i] > h[i+1]:
-            swing_highs.append((i, h[i]))
-        if l[i] < l[i-1] and l[i] < l[i+1]:
-            swing_lows.append((i, l[i]))
-    if len(swing_highs) < 2 or len(swing_lows) < 2:
-        # Fallback a BOS simple
-        ultimo_max = max(highs[-5:-1])
-        ultimo_min = min(lows[-5:-1])
-        precio_actual = cierres[-1]
-        if precio_actual > ultimo_max:
-            return "Alcista (BOS ↗)", False
-        elif precio_actual < ultimo_min:
-            return "Bajista (BOS ↘)", False
-        return "Lateral", False
-    ultimo_sh = swing_highs[-1][1]
-    penultimo_sh = swing_highs[-2][1]
-    ultimo_sl = swing_lows[-1][1]
-    penultimo_sl = swing_lows[-2][1]
-    precio_actual = cierres[-1]
-    choch_detectado = False
-    if precio_actual > ultimo_sh and ultimo_sh > penultimo_sh:
-        estructura = "Alcista (BOS ↗)"
-    elif precio_actual < ultimo_sl and ultimo_sl < penultimo_sl:
-        estructura = "Bajista (BOS ↘)"
-    elif precio_actual > ultimo_sh and ultimo_sh < penultimo_sh:
-        estructura = "CHoCH Alcista 🔄"
-        choch_detectado = True
-    elif precio_actual < ultimo_sl and ultimo_sl > penultimo_sl:
-        estructura = "CHoCH Bajista 🔄"
-        choch_detectado = True
-    else:
-        estructura = "Lateral"
-    return estructura, choch_detectado
+def detectar_bos(highs, lows):
+    if len(highs) < 5:
+        return "Indeterminado"
+    ultimo_max = max(highs[-5:-1])
+    ultimo_min = min(lows[-5:-1])
+    precio_actual = highs[-1]
+    if precio_actual > ultimo_max:
+        return "Alcista (BOS ↗)"
+    elif precio_actual < ultimo_min:
+        return "Bajista (BOS ↘)"
+    return "Lateral"
 
 def detectar_order_block(cierres, highs, lows):
     if len(cierres) < 10:
         return None, None
     for i in range(len(cierres)-2, max(len(cierres)-10, 0), -1):
         if cierres[i] < cierres[i-1] and cierres[i+1] > cierres[i]:
-            return round(lows[i], 2), round(highs[i], 2)
+            ob_high = highs[i]
+            ob_low = lows[i]
+            return round(ob_low, 2), round(ob_high, 2)
     return None, None
-
-def detectar_fvg(highs, lows, cierres):
-    """Fair Value Gap — desequilibrio institucional entre 3 velas"""
-    if len(cierres) < 5:
-        return None, None, None
-    for i in range(len(cierres)-3, max(len(cierres)-12, 1), -1):
-        if lows[i+1] > highs[i-1]:
-            return "Alcista", round(highs[i-1], 2), round(lows[i+1], 2)
-        elif highs[i+1] < lows[i-1]:
-            return "Bajista", round(highs[i+1], 2), round(lows[i-1], 2)
-    return None, None, None
-
-def calcular_sl_tp(precio, estructura, ob_low, ob_high):
-    """Stop Loss y Take Profit dinámicos basados en SMC"""
-    sl = tp1 = tp2 = None
-    if "Alcista" in estructura or "CHoCH Alcista" in estructura:
-        sl = round(ob_low * 0.998, 2) if ob_low else round(precio * 0.98, 2)
-        riesgo = precio - sl
-        tp1 = round(precio + (riesgo * 1.5), 2)
-        tp2 = round(precio + (riesgo * 3), 2)
-    elif "Bajista" in estructura or "CHoCH Bajista" in estructura:
-        sl = round(ob_high * 1.002, 2) if ob_high else round(precio * 1.02, 2)
-        riesgo = sl - precio
-        tp1 = round(precio - (riesgo * 1.5), 2)
-        tp2 = round(precio - (riesgo * 3), 2)
-    return sl, tp1, tp2
 
 def calcular_confluencias(precio, cierres, highs, lows):
     confluencias = 0
@@ -144,9 +87,8 @@ def calcular_confluencias(precio, cierres, highs, lows):
     rsi_4h = calcular_rsi(cierres)
     mm20 = calcular_mm(cierres, 20)
     mm50 = calcular_mm(cierres, 50)
-    estructura, choch = detectar_choch(highs, lows, cierres)
+    estructura = detectar_bos(highs, lows)
     ob_low, ob_high = detectar_order_block(cierres, highs, lows)
-    fvg_tipo, fvg_low, fvg_high = detectar_fvg(highs, lows, cierres)
 
     # Confluencia 1: RSI
     if rsi_4h and rsi_4h < 35:
@@ -156,13 +98,13 @@ def calcular_confluencias(precio, cierres, highs, lows):
         confluencias += 1
         detalles.append(f"RSI sobrecomprado ({rsi_4h})")
 
-    # Confluencia 2: Estructura BOS / CHoCH
+    # Confluencia 2: Estructura
     if "Alcista" in estructura:
         confluencias += 1
-        detalles.append("CHoCH Alcista — cambio de tendencia 🔄" if choch else "BOS alcista confirmado")
+        detalles.append("BOS alcista confirmado")
     elif "Bajista" in estructura:
         confluencias += 1
-        detalles.append("CHoCH Bajista — cambio de tendencia 🔄" if choch else "BOS bajista confirmado")
+        detalles.append("BOS bajista confirmado")
 
     # Confluencia 3: Media Móvil
     if mm20 and mm50:
@@ -173,13 +115,11 @@ def calcular_confluencias(precio, cierres, highs, lows):
             confluencias += 1
             detalles.append("Precio bajo MM20 y MM50")
 
-    # Confluencia 4: Order Block o Fair Value Gap
-    if ob_low and ob_high and ob_low <= precio <= ob_high:
-        confluencias += 1
-        detalles.append(f"Precio en OB ${ob_low}-${ob_high}")
-    elif fvg_tipo and fvg_low and fvg_high and fvg_low <= precio <= fvg_high:
-        confluencias += 1
-        detalles.append(f"FVG {fvg_tipo} detectado ${fvg_low}-${fvg_high}")
+    # Confluencia 4: Order Block
+    if ob_low and ob_high:
+        if ob_low <= precio <= ob_high:
+            confluencias += 1
+            detalles.append(f"Precio en OB ${ob_low}-${ob_high}")
 
     return confluencias, detalles, rsi_4h, mm20, mm50, estructura, ob_low, ob_high
 
@@ -296,12 +236,64 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
     ob_display = f"${ob_low:,.2f} - ${ob_high:,.2f}" if ob_low and ob_high else "..."
     confluencias_color = "#00ff88" if confluencias >= 3 else "orange" if confluencias == 2 else "#aaa"
 
+    precio_fmt = f"{precio:,.2f}"
+    decision_seo = decisiones[decision_key]
+    desc_seo = f"BitMind — Sinal SMC ao vivo para {par['nombre']}: ${precio_fmt} USD. Decisão: {decision_seo}. Análise automática com IA e Smart Money Concepts. Grátis no Telegram."
+    keywords_seo = f"bitcoin sinal gratis, trading crypto brasil, SMC bitcoin, sinais cripto telegram, {par['nombre'].lower()} análise, bot trading bitcoin, smart money concepts brasil"
+
     html = f"""
-    <html>
+    <html lang="{'es' if lang == 'es' else 'pt-BR'}">
     <head>
-        <title>BitMind</title>
+        <title>BitMind — {par['nombre']} ${precio_fmt} | Sinal SMC ao Vivo</title>
         <meta http-equiv="refresh" content="30;url=/?lang={lang}&cripto={cripto}">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta charset="UTF-8">
+
+        <!-- SEO básico -->
+        <meta name="description" content="{desc_seo}">
+        <meta name="keywords" content="{keywords_seo}">
+        <meta name="author" content="BitMind">
+        <meta name="robots" content="index, follow">
+        <link rel="canonical" href="https://bitmind.app.br/?cripto={cripto}">
+
+        <!-- Open Graph (WhatsApp, Facebook, LinkedIn) -->
+        <meta property="og:type" content="website">
+        <meta property="og:url" content="https://bitmind.app.br/?cripto={cripto}">
+        <meta property="og:title" content="BitMind — {par['nombre']} ${precio_fmt} | {decision_seo}">
+        <meta property="og:description" content="{desc_seo}">
+        <meta property="og:image" content="https://bitmind.app.br/og-image.png">
+        <meta property="og:site_name" content="BitMind">
+        <meta property="og:locale" content="{'es_LA' if lang == 'es' else 'pt_BR'}">
+
+        <!-- Twitter Card -->
+        <meta name="twitter:card" content="summary_large_image">
+        <meta name="twitter:title" content="BitMind — {par['nombre']} ${precio_fmt} | {decision_seo}">
+        <meta name="twitter:description" content="{desc_seo}">
+        <meta name="twitter:image" content="https://bitmind.app.br/og-image.png">
+
+        <!-- Schema.org JSON-LD -->
+        <script type="application/ld+json">
+        {{
+          "@context": "https://schema.org",
+          "@type": "WebApplication",
+          "name": "BitMind",
+          "url": "https://bitmind.app.br",
+          "description": "Plataforma de sinais de trading de criptomoedas com análise SMC e Inteligência Artificial. Grátis no Telegram.",
+          "applicationCategory": "FinanceApplication",
+          "operatingSystem": "Web",
+          "offers": {{
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "BRL"
+          }},
+          "author": {{
+            "@type": "Organization",
+            "name": "BitMind",
+            "url": "https://bitmind.app.br"
+          }}
+        }}
+        </script>
+
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <style>
             * {{ box-sizing: border-box; margin: 0; padding: 0; }}
@@ -763,76 +755,7 @@ import asyncio
 
 ultima_senal_enviada = {"cripto": "", "decision": ""}
 
-def generar_grafico_telegram(cripto, cierres, precio, mm20, mm50, ob_low, ob_high, decision):
-    """Genera imagen PNG del gráfico para enviar en Telegram"""
-    try:
-        import matplotlib
-        matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
-        import matplotlib.patches as mpatches
-
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 6), gridspec_kw={'height_ratios': [3, 1]})
-        fig.patch.set_facecolor('#0d0d1a')
-
-        # Gráfico de precio
-        ultimos = cierres[-24:] if len(cierres) >= 24 else cierres
-        x = list(range(len(ultimos)))
-        color_linea = '#00ff88' if decision == "COMPRAR" else '#ff4444' if decision == "VENDER" else '#f0a500'
-
-        ax1.set_facecolor('#16213e')
-        ax1.plot(x, ultimos, color=color_linea, linewidth=2, zorder=3)
-        ax1.fill_between(x, ultimos, min(ultimos), alpha=0.15, color=color_linea)
-
-        # MM20 y MM50
-        if mm20:
-            ax1.axhline(y=mm20, color='#f0a500', linestyle='--', linewidth=1, alpha=0.7, label=f'MM20: ${mm20:,.0f}')
-        if mm50:
-            ax1.axhline(y=mm50, color='#aaaaaa', linestyle='--', linewidth=1, alpha=0.7, label=f'MM50: ${mm50:,.0f}')
-
-        # Order Block
-        if ob_low and ob_high:
-            ax1.axhspan(ob_low, ob_high, alpha=0.15, color='#9b59b6', label=f'OB: ${ob_low:,.0f}-${ob_high:,.0f}')
-
-        # Precio actual
-        ax1.axhline(y=precio, color='white', linestyle='-', linewidth=0.8, alpha=0.5)
-        ax1.text(len(x)-1, precio, f' ${precio:,.0f}', color='white', fontsize=9, va='center')
-
-        ax1.set_title(f'BitMind Signal — {cripto}/USD', color='white', fontsize=13, fontweight='bold', pad=10)
-        ax1.tick_params(colors='#aaa', labelsize=8)
-        ax1.spines[:].set_color('#333')
-        ax1.legend(loc='upper left', fontsize=8, facecolor='#16213e', labelcolor='white', framealpha=0.8)
-        ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f'${v:,.0f}'))
-
-        # RSI simplificado
-        ax2.set_facecolor('#16213e')
-        rsi_vals = []
-        for i in range(max(1, len(ultimos)-14), len(ultimos)):
-            sub = cierres[:i+1]
-            rsi_val = calcular_rsi(sub)
-            rsi_vals.append(rsi_val if rsi_val else 50)
-        if len(rsi_vals) < len(x):
-            rsi_vals = [50] * (len(x) - len(rsi_vals)) + rsi_vals
-        ax2.plot(x, rsi_vals, color='#f0a500', linewidth=1.5)
-        ax2.axhline(y=70, color='#ff4444', linestyle='--', linewidth=0.8, alpha=0.6)
-        ax2.axhline(y=30, color='#00ff88', linestyle='--', linewidth=0.8, alpha=0.6)
-        ax2.fill_between(x, rsi_vals, 50, alpha=0.1, color='#f0a500')
-        ax2.set_ylim(0, 100)
-        ax2.set_ylabel('RSI', color='#aaa', fontsize=8)
-        ax2.tick_params(colors='#aaa', labelsize=7)
-        ax2.spines[:].set_color('#333')
-
-        plt.tight_layout(pad=1.5)
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=120, facecolor='#0d0d1a', bbox_inches='tight')
-        plt.close()
-        buf.seek(0)
-        return buf
-    except Exception as e:
-        print(f"Error generando gráfico: {e}")
-        return None
-
-
-def enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles, cierres=None, mm20=None, mm50=None):
+def enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles):
     global ultima_senal_enviada
     try:
         token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -844,50 +767,22 @@ def enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles
             return
         emoji = "🟢" if decision == "COMPRAR" else "🔴"
         detalles_txt = "\n".join([f"✅ {d}" for d in detalles])
-        ob_low = ob_high = None
-        for d in detalles:
-            if "OB $" in d:
-                try:
-                    partes = d.replace("Precio en OB $","").split("-$")
-                    ob_low = float(partes[0].replace(",",""))
-                    ob_high = float(partes[1].replace(",",""))
-                except:
-                    pass
-        sl, tp1, tp2 = calcular_sl_tp(precio, estructura, ob_low, ob_high)
-        sl_txt = f"\n🛑 *Stop Loss:* ${sl:,.2f}" if sl else ""
-        tp_txt = f"\n🎯 *TP1:* ${tp1:,.2f} | *TP2:* ${tp2:,.2f}" if tp1 and tp2 else ""
-        choch_txt = "\n🔄 *CHoCH detectado — posible reversión*" if "CHoCH" in estructura else ""
-        caption = f"""🤖 *BitMind Signal*
+        mensaje = f"""🤖 *BitMind Signal*
 
 {emoji} *{decision}* — {cripto}/USD
-💰 *Precio:* ${precio:,.2f}
-⚡ *{confluencias}/4* Confluencias SMC
-📊 *Estructura:* {estructura}{choch_txt}
+💰 Precio: ${precio:,.2f}
+⚡ {confluencias}/4 Confluencias SMC
+📊 Estructura: {estructura}
 
-{detalles_txt}{sl_txt}{tp_txt}
+{detalles_txt}
 
 👉 [Ver análisis completo](https://bitmind.app.br)"""
-
-        # Intentar enviar con gráfico
-        grafico = None
-        if cierres:
-            grafico = generar_grafico_telegram(cripto, cierres, precio, mm20, mm50, ob_low, ob_high, decision)
-
-        if grafico:
-            url_photo = f"https://api.telegram.org/bot{token}/sendPhoto"
-            requests.post(url_photo, data={
-                "chat_id": channel,
-                "caption": caption,
-                "parse_mode": "Markdown"
-            }, files={"photo": ("chart.png", grafico, "image/png")})
-        else:
-            url_msg = f"https://api.telegram.org/bot{token}/sendMessage"
-            requests.post(url_msg, json={
-                "chat_id": channel,
-                "text": caption,
-                "parse_mode": "Markdown"
-            })
-
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        requests.post(url, json={
+            "chat_id": channel,
+            "text": mensaje,
+            "parse_mode": "Markdown"
+        })
         ultima_senal_enviada = {"cripto": cripto, "decision": decision}
         print(f"✅ Señal enviada a Telegram: {cripto} {decision}")
     except Exception as e:
@@ -902,7 +797,25 @@ async def landing_page():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BitMind — Sinais SMC em Tempo Real</title>
+<title>BitMind — Sinais SMC em Tempo Real | Trading Crypto Grátis</title>
+<meta name="description" content="BitMind analisa BTC, ETH, SOL, BNB e XRP com Smart Money Concepts e IA. Receba sinais de trading gratuitos no Telegram. Análise automática a cada 6 horas.">
+<meta name="keywords" content="sinais crypto gratis, trading bitcoin brasil, SMC crypto, bot trading telegram, bitcoin análise, smart money concepts, sinais btc gratis, trading criptomoedas">
+<meta name="author" content="BitMind">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://bitmind.app.br/landing">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://bitmind.app.br/landing">
+<meta property="og:title" content="BitMind — Sinais SMC Grátis no Telegram">
+<meta property="og:description" content="Análise automática de BTC, ETH, SOL, BNB e XRP com Smart Money Concepts e IA. Grátis no Telegram.">
+<meta property="og:image" content="https://bitmind.app.br/og-image.png">
+<meta property="og:site_name" content="BitMind">
+<meta property="og:locale" content="pt_BR">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="BitMind — Sinais SMC Grátis">
+<meta name="twitter:description" content="Análise automática de crypto com IA e SMC. Grátis no Telegram.">
+<script type="application/ld+json">
+{{"@context":"https://schema.org","@type":"WebApplication","name":"BitMind","url":"https://bitmind.app.br","description":"Plataforma de sinais de trading de criptomoedas com SMC e IA","applicationCategory":"FinanceApplication","offers":{{"@type":"Offer","price":"0","priceCurrency":"BRL"}}}}
+</script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
 
@@ -1672,6 +1585,35 @@ async def ping():
     return {"status": "ok", "message": "BitMind alive!"}
 
 
+@app.get("/sitemap.xml")
+async def sitemap():
+    from fastapi.responses import Response
+    xml = """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://bitmind.app.br/</loc><changefreq>always</changefreq><priority>1.0</priority></url>
+  <url><loc>https://bitmind.app.br/landing</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://bitmind.app.br/resumen</loc><changefreq>always</changefreq><priority>0.8</priority></url>
+  <url><loc>https://bitmind.app.br/about</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+</urlset>"""
+    return Response(content=xml, media_type="application/xml")
+
+
+@app.get("/robots.txt")
+async def robots():
+    from fastapi.responses import Response
+    txt = """User-agent: *
+Allow: /
+Allow: /landing
+Allow: /resumen
+Allow: /about
+Disallow: /stats
+Disallow: /test-telegram
+Disallow: /ping
+
+Sitemap: https://bitmind.app.br/sitemap.xml"""
+    return Response(content=txt, media_type="text/plain")
+
+
 @app.get("/test-telegram")
 async def test_telegram():
     try:
@@ -1685,22 +1627,11 @@ async def test_telegram():
                 decision_key, color, etiqueta = determinar_senal(precio, confluencias, detalles, estructura)
                 decision = "COMPRAR" if decision_key == "comprar" else "VENDER" if decision_key == "vender" else "ESPERAR"
                 if confluencias >= 3:
-                    enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles, cierres=cierres, mm20=mm20, mm50=mm50)
+                    enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles)
                 resultados.append(f"{cripto}: {decision} ({confluencias}/4)")
         return {"status": "ok", "resultados": resultados}
     except Exception as e:
         return {"status": "error", "detalle": str(e)}
-
-
-async def self_ping():
-    """Self-ping cada 10 minutos para mantener Render despierto"""
-    while True:
-        try:
-            await asyncio.sleep(600)  # 10 minutos
-            requests.get("https://bitmind.app.br/ping", timeout=10)
-            print("🔔 Self-ping OK")
-        except Exception as e:
-            print(f"Self-ping error: {e}")
 
 
 async def loop_analisis():
@@ -1715,7 +1646,7 @@ async def loop_analisis():
                     decision_key, color, etiqueta = determinar_senal(precio, confluencias, detalles, estructura)
                     decision = "COMPRAR" if decision_key == "comprar" else "VENDER" if decision_key == "vender" else "ESPERAR"
                     if confluencias >= 3:
-                        enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles, cierres=cierres, mm20=mm20, mm50=mm50)
+                        enviar_telegram(cripto, precio, decision, confluencias, estructura, detalles)
         except Exception as e:
             print(f"Error en loop_analisis: {e}")
         await asyncio.sleep(21600)
@@ -1724,4 +1655,3 @@ async def loop_analisis():
 @app.on_event("startup")
 async def iniciar_scheduler():
     asyncio.create_task(loop_analisis())
-    asyncio.create_task(self_ping())
