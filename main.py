@@ -125,10 +125,26 @@ def calcular_confluencias(precio, cierres, highs, lows):
 
 def determinar_senal(precio, confluencias, detalles, estructura):
     if confluencias >= 3:
-        if "Alcista" in estructura or any("sobrevendido" in d for d in detalles):
+        es_alcista = "Alcista" in estructura or "CHoCH Alcista" in estructura
+        es_bajista = "Bajista" in estructura or "CHoCH Bajista" in estructura
+        tiene_sobrevendido = any("sobrevendido" in d for d in detalles)
+        tiene_sobrecomprado = any("sobrecomprado" in d for d in detalles)
+        tiene_precio_bajo_mm = any("bajo MM20 y MM50" in d for d in detalles)
+        tiene_precio_sobre_mm = any("sobre MM20 y MM50" in d for d in detalles)
+
+        # COMPRAR: necesita estructura alcista O sobrevendido + NO estar sobrecomprado
+        if (es_alcista or tiene_sobrevendido) and not tiene_sobrecomprado:
+            # Confirmación extra: precio no debe estar muy por encima de MM20
             return "comprar", "#00ff88", "🟢 ALTA CONFLUENCIA"
-        elif "Bajista" in estructura or any("sobrecomprado" in d for d in detalles):
+
+        # VENDER: necesita estructura bajista O sobrecomprado + NO estar sobrevendido
+        elif (es_bajista or tiene_sobrecomprado) and not tiene_sobrevendido:
             return "vender", "#ff4444", "🔴 ALTA CONFLUENCIA"
+
+        # Señales contradictorias → esperar
+        else:
+            return "esperar", "orange", "🟡 SEÑALES CONTRADICTORIAS"
+
     elif confluencias == 2:
         return "esperar", "orange", "🟡 CONFLUENCIA MEDIA"
     return "esperar", "orange", "⚪ BAJA CONFLUENCIA"
@@ -236,67 +252,12 @@ def inicio(lang: str = Query("es"), cripto: str = Query("BTC")):
     ob_display = f"${ob_low:,.2f} - ${ob_high:,.2f}" if ob_low and ob_high else "..."
     confluencias_color = "#00ff88" if confluencias >= 3 else "orange" if confluencias == 2 else "#aaa"
 
-    precio_fmt = f"{precio:,.2f}"
-    decision_seo = decisiones[decision_key]
-    desc_seo = f"BitMind — Sinal SMC ao vivo para {par['nombre']}: ${precio_fmt} USD. Decisão: {decision_seo}. Análise automática com IA e Smart Money Concepts. Grátis no Telegram."
-    keywords_seo = f"bitcoin sinal gratis, trading crypto brasil, SMC bitcoin, sinais cripto telegram, {par['nombre'].lower()} análise, bot trading bitcoin, smart money concepts brasil"
-
     html = f"""
-    <html lang="{'es' if lang == 'es' else 'pt-BR'}">
+    <html>
     <head>
-        <title>BitMind — {par['nombre']} ${precio_fmt} | Sinal SMC ao Vivo</title>
+        <title>BitMind</title>
         <meta http-equiv="refresh" content="30;url=/?lang={lang}&cripto={cripto}">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta charset="UTF-8">
-
-        <!-- Google Search Console Verification -->
-        <meta name="google-site-verification" content="t4i6V5hP4a7mSVKlvSSfQhLQDeILWN1mhzcV8Pf8VMU" />
-
-        <!-- SEO básico -->
-        <meta name="description" content="{desc_seo}">
-        <meta name="keywords" content="{keywords_seo}">
-        <meta name="author" content="BitMind">
-        <meta name="robots" content="index, follow">
-        <link rel="canonical" href="https://bitmind.app.br/?cripto={cripto}">
-
-        <!-- Open Graph (WhatsApp, Facebook, LinkedIn) -->
-        <meta property="og:type" content="website">
-        <meta property="og:url" content="https://bitmind.app.br/?cripto={cripto}">
-        <meta property="og:title" content="BitMind — {par['nombre']} ${precio_fmt} | {decision_seo}">
-        <meta property="og:description" content="{desc_seo}">
-        <meta property="og:image" content="https://bitmind.app.br/og-image.png">
-        <meta property="og:site_name" content="BitMind">
-        <meta property="og:locale" content="{'es_LA' if lang == 'es' else 'pt_BR'}">
-
-        <!-- Twitter Card -->
-        <meta name="twitter:card" content="summary_large_image">
-        <meta name="twitter:title" content="BitMind — {par['nombre']} ${precio_fmt} | {decision_seo}">
-        <meta name="twitter:description" content="{desc_seo}">
-        <meta name="twitter:image" content="https://bitmind.app.br/og-image.png">
-
-        <!-- Schema.org JSON-LD -->
-        <script type="application/ld+json">
-        {{
-          "@context": "https://schema.org",
-          "@type": "WebApplication",
-          "name": "BitMind",
-          "url": "https://bitmind.app.br",
-          "description": "Plataforma de sinais de trading de criptomoedas com análise SMC e Inteligência Artificial. Grátis no Telegram.",
-          "applicationCategory": "FinanceApplication",
-          "operatingSystem": "Web",
-          "offers": {{
-            "@type": "Offer",
-            "price": "0",
-            "priceCurrency": "BRL"
-          }},
-          "author": {{
-            "@type": "Organization",
-            "name": "BitMind",
-            "url": "https://bitmind.app.br"
-          }}
-        }}
-        </script>
-
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <style>
             * {{ box-sizing: border-box; margin: 0; padding: 0; }}
@@ -800,25 +761,7 @@ async def landing_page():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BitMind — Sinais SMC em Tempo Real | Trading Crypto Grátis</title>
-<meta name="description" content="BitMind analisa BTC, ETH, SOL, BNB e XRP com Smart Money Concepts e IA. Receba sinais de trading gratuitos no Telegram. Análise automática a cada 6 horas.">
-<meta name="keywords" content="sinais crypto gratis, trading bitcoin brasil, SMC crypto, bot trading telegram, bitcoin análise, smart money concepts, sinais btc gratis, trading criptomoedas">
-<meta name="author" content="BitMind">
-<meta name="robots" content="index, follow">
-<link rel="canonical" href="https://bitmind.app.br/landing">
-<meta property="og:type" content="website">
-<meta property="og:url" content="https://bitmind.app.br/landing">
-<meta property="og:title" content="BitMind — Sinais SMC Grátis no Telegram">
-<meta property="og:description" content="Análise automática de BTC, ETH, SOL, BNB e XRP com Smart Money Concepts e IA. Grátis no Telegram.">
-<meta property="og:image" content="https://bitmind.app.br/og-image.png">
-<meta property="og:site_name" content="BitMind">
-<meta property="og:locale" content="pt_BR">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="BitMind — Sinais SMC Grátis">
-<meta name="twitter:description" content="Análise automática de crypto com IA e SMC. Grátis no Telegram.">
-<script type="application/ld+json">
-{{"@context":"https://schema.org","@type":"WebApplication","name":"BitMind","url":"https://bitmind.app.br","description":"Plataforma de sinais de trading de criptomoedas com SMC e IA","applicationCategory":"FinanceApplication","offers":{{"@type":"Offer","price":"0","priceCurrency":"BRL"}}}}
-</script>
+<title>BitMind — Sinais SMC em Tempo Real</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
 
@@ -1586,35 +1529,6 @@ async def landing_page():
 @app.get("/ping")
 async def ping():
     return {"status": "ok", "message": "BitMind alive!"}
-
-
-@app.get("/sitemap.xml")
-async def sitemap():
-    from fastapi.responses import Response
-    xml = """<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://bitmind.app.br/</loc><changefreq>always</changefreq><priority>1.0</priority></url>
-  <url><loc>https://bitmind.app.br/landing</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
-  <url><loc>https://bitmind.app.br/resumen</loc><changefreq>always</changefreq><priority>0.8</priority></url>
-  <url><loc>https://bitmind.app.br/about</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
-</urlset>"""
-    return Response(content=xml, media_type="application/xml")
-
-
-@app.get("/robots.txt")
-async def robots():
-    from fastapi.responses import Response
-    txt = """User-agent: *
-Allow: /
-Allow: /landing
-Allow: /resumen
-Allow: /about
-Disallow: /stats
-Disallow: /test-telegram
-Disallow: /ping
-
-Sitemap: https://bitmind.app.br/sitemap.xml"""
-    return Response(content=txt, media_type="text/plain")
 
 
 @app.get("/test-telegram")
